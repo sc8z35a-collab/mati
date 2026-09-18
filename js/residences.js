@@ -12,15 +12,106 @@ window.EvercityResidences = class EvercityResidences {
       const t=new T.CanvasTexture(cv);t.colorSpace=T.SRGBColorSpace;t.wrapS=t.wrapT=T.RepeatWrapping;t.anisotropy=8;return t;
     };
     mat('oak','#ffffff',.74,0,{map:makeTexture('oak')});m.tile.map=makeTexture('tile');
+    mat('hallCarpet','#59706b',1,0,{map:makeTexture('tile')});
+    mat('travertine','#ded1bb',.78,0,{map:makeTexture('oak')});
+    // Original architectural prints, shared across floors instead of external image assets.
+    for(let style=0;style<3;style++){
+      const cv=document.createElement('canvas');cv.width=512;cv.height=512;const ctx=cv.getContext('2d');
+      ctx.fillStyle=['#ede5ce','#c3c8bd','#efc7a6'][style];ctx.fillRect(0,0,512,512);
+      ctx.fillStyle=['#d5ad70','#aa9071','#bf7353'][style];ctx.beginPath();ctx.arc(340,155,70,0,Math.PI*2);ctx.fill();
+      for(let n=0;n<7;n++){ctx.fillStyle=['#4e7162','#53646c','#905f50'][style];ctx.globalAlpha=.25+n*.09;ctx.beginPath();ctx.moveTo(0,300+n*27);ctx.bezierCurveTo(180,110+n*36,240,460-n*21,512,250+n*25);ctx.lineTo(512,512);ctx.lineTo(0,512);ctx.fill();}
+      ctx.globalAlpha=1;ctx.fillStyle='#f7f0dc';ctx.font='18px sans-serif';ctx.fillText(['BOTANICAL STUDIES / 01','CITY IN STILLNESS / 02','EARTH & LIGHT / 03'][style],30,468);
+      const texture=new T.CanvasTexture(cv);texture.colorSpace=T.SRGBColorSpace;
+      mat('residenceArt'+style,'#ffffff',.9,0,{map:texture});
+    }
+    // Meter-scaled UVs keep boards and tile joints consistent in every apartment size.
+    for(const [key,meters] of [['oak',4],['tile',4],['hallCarpet',1.6],['travertine',3]]){
+      m[key].onBeforeCompile=shader=>{shader.vertexShader=shader.vertexShader.replace('#include <uv_vertex>',`#include <uv_vertex>
+        vec4 floorPosition = vec4(position, 1.0);
+        vec3 floorNormal = normal;
+        #ifdef USE_INSTANCING
+          floorPosition = instanceMatrix * floorPosition;
+          floorNormal = mat3(instanceMatrix) * floorNormal;
+        #endif
+        floorPosition = modelMatrix * floorPosition;
+        floorNormal = abs(normalize(mat3(modelMatrix) * floorNormal));
+        #ifdef USE_MAP
+          vMapUv = (floorNormal.y > .5 ? floorPosition.xz : (floorNormal.x > .5 ? floorPosition.zy : floorPosition.xy)) / ${meters.toFixed(2)};
+        #endif`);};
+      m[key].customProgramCacheKey=()=>`residence-surface-${meters}`;
+    }
   }
   build(b,f){
     if(f===0){this.lobby(b);return;}
     const a=this.a,y=a.BASE+f*a.FLOOR;
     b.units=b.units||{};b.units[f]=[];
     for(const side of [-1,1])this.apartment(b,f,side,y);
-    // Common corridor: warm wall sconces, numbered entrances and a clear path to the lift.
-    for(const side of [-1,1])for(let z=-b.d/2+10;z<b.d/2-3;z+=7){a.box('gold',b.x+side*3.05,y+2.5,b.z+z,.09,.8,.35);a.box('glow',b.x+side*2.98,y+2.5,b.z+z,.07,.5,.28);}
-    a.fixture(b,f,b.x,y+4.3,b.z+2,90,'#ffe4b9');
+    this.corridor(b,f,y);
+  }
+  floorLayout(b){
+    // Paint by rectangle subtraction, not stacked full-floor planes. Each X/Z point
+    // belongs to exactly one finish; all finishes meet at the same walking height.
+    let tiles=[{x0:-b.w/2+.3,x1:b.w/2-.3,z0:-b.d/2+.3,z1:b.d/2-.3,material:'travertine'}];
+    const paint=(x0,x1,z0,z1,material)=>{
+      const next=[];
+      for(const r of tiles){
+        const l=Math.max(x0,r.x0),h=Math.min(x1,r.x1),t=Math.max(z0,r.z0),k=Math.min(z1,r.z1);
+        if(l>=h||t>=k){next.push(r);continue;}
+        for(const [a,c,d,e] of [[r.x0,l,r.z0,r.z1],[h,r.x1,r.z0,r.z1],[l,h,r.z0,t],[l,h,k,r.z1]])if(c-a>1e-6&&e-d>1e-6)next.push({x0:a,x1:c,z0:d,z1:e,material:r.material});
+        next.push({x0:l,x1:h,z0:t,z1:k,material});
+      }
+      tiles=next;
+    };
+    const width=b.w/2-4.1,depth=b.d-9.4,back=-b.d/2+7.2;
+    paint(-2.5,2.5,-b.d/2+7,b.d/2-3,'hallCarpet');
+    for(const side of [-1,1]){
+      const region=(u,v,w,d,material)=>{const x=side*(3.4+u);paint(x-w/2,x+w/2,back+v-d/2,back+v+d/2,material);};
+      region(width/2,depth/2,width,depth,'oak');
+      region(1.25,depth*.72,2.5,3.25,'tile');
+      region(width-2.15,depth*.44+4.2,4.1,5.9,'tile');
+      region(2.85,3.5,5.5,6.9,'tile');
+    }
+    return tiles;
+  }
+  floor(b,f){
+    const y=this.a.BASE+f*this.a.FLOOR;
+    for(const r of this.floorLayout(b)){
+      const mesh=this.a.box(r.material,b.x+(r.x0+r.x1)/2,y+.15,b.z+(r.z0+r.z1)/2,r.x1-r.x0,.12,r.z1-r.z0);
+      if(mesh.isMesh){mesh.userData.floorSurface='finish';mesh.userData.floorBounds=r;}
+    }
+  }
+  corridor(b,f,y){
+    const a=this.a,{box,cyl,solid,fixture}=a,back=b.z-b.d/2+7.2,depth=b.d-9.4,entry=back+depth*.72;
+    // Recessed panels and wall-mounted equipment stay outside the 5m clear aisle.
+    for(const side of [-1,1]){
+      const x=b.x+side*3.27;
+      for(let z=back+2;z<entry-2.8;z+=3.8){
+        box('walnut',x,y+.92,z,.09,1.35,3.4);
+        box('gold',x-side*.055,y+1.64,z,.035,.035,3.4);
+        box('gold',x-side*.05,y+2.7,z,.14,.86,.36);box('glow',x-side*.14,y+2.7,z,.065,.58,.25);
+      }
+      const z=back+3.2;
+      box('paper',x-side*.14,y+1.08,z,.27,1.5,1);box('lobbyGlass',x-side*.3,y+1.08,z,.025,1.3,.82);
+      cyl('red',x-side*.34,y+.97,z,.16,.79);box('black',x-side*.34,y+1.44,z,.16,.12,.18);
+      box('paper',x-side*.1,y+3.28,z,.06,.6,1.7);
+      if(a.active())a.roomLabel('FIRE / 消火器',x-side*.15,y+3.28,z,side<0?Math.PI/2:-Math.PI/2,1.5);
+      // Entry intercom and a shallow wall-mounted parcel ledge.
+      box('black',x-side*.09,y+1.9,entry+1.8,.12,.58,.26);box('screen',x-side*.16,y+2,entry+1.8,.035,.22,.19);
+      box('gold',x-side*.17,y+1.76,entry+1.8,.04,.08,.08);
+    }
+    const lift=b.z-b.d/2+5.29;
+    box('travertine',b.x,y+4.67,lift,6.4,.46,.3);
+    if(a.active())a.roomLabel(`${String(f+1).padStart(2,'0')}  /  RESIDENCES`,b.x,y+4.68,lift+.18,0,3.8);
+    for(let z=back+2;z<b.z+b.d/2-3;z+=6.8){
+      box('walnut',b.x,y+5.17,z,6.65,.2,.9);box('glow',b.x,y+5.04,z,3.4,.055,.3);
+      fixture(b,f,b.x,y+4.85,z,105,'#ffe2b9');
+    }
+    // Window-end bench and planter create a shared resting spot, not a blocked corridor.
+    const end=b.z+b.d/2-1.25;
+    box('walnut',b.x,y+.58,end,3.8,.65,.8);box('linen',b.x,y+.98,end,3.7,.18,.84);solid(b.x,end,3.8,.84);
+    for(const dx of [-2.7,2.7]){a.plant(b.x+dx,y+.21,end,.65);solid(b.x+dx,end,.65,.65);}
+    // An opaque underside also finishes the top occupied floor consistently.
+    box('plaster',b.x,y+5.31,b.z,b.w-.65,.12,b.d-.65);
   }
   lobby(b){
     const {box,plant,sofa,table,bookcase,solid,fixture,BASE:y}=this.a;
@@ -36,6 +127,20 @@ window.EvercityResidences = class EvercityResidences {
     solid(x+9,z-b.d*.2,6,2);box('walnut',x+9,y+.7,z-b.d*.2,6,1.4,2);box('marble',x+9,y+1.45,z-b.d*.2,6.2,.12,2.15);box('black',x+9,y+1.84,z-b.d*.2,1,.6,.08);
     for(let row=0;row<4;row++)for(let col=0;col<6;col++){box('gold',x-14+col*.9,y+.7+row*.55,z-b.d/2+1.3,.8,.46,.18);box('dark',x-14+col*.9,y+.75+row*.55,z-b.d/2+1.41,.48,.025,.02);}
     for(let n=0;n<3;n++){solid(x-11+n*1.2,z-5,.95,.85);box('paper',x-11+n*1.2,y+.42,z-5,.95,.8,.85);box('wood',x-11+n*1.2,y+.84,z-5,.16,.015,.85);}
+    // Full-height parcel lockers, concierge backdrop and a residents' notice board.
+    const lockers=x-b.w/2+1.05;
+    solid(lockers,z+1,1.15,5.6);box('walnut',lockers,y+1.9,z+1,1.15,3.4,5.6);
+    for(let row=0;row<3;row++)for(let col=0;col<5;col++){
+      box('kitchen',lockers+.6,y+.85+row*1.05,z-1.2+col*1.1,.05,.97,1.02);
+      box('dark',lockers+.64,y+.85+row*1.05,z-1.45+col*1.1,.045,.18,.24);
+    }
+    for(let n=0;n<19;n++)box('walnut',x+5+n*.45,y+2.55,z-b.d/2+.65,.16,4.6,.15);
+    this.a.roomLabel('CONCIERGE / RESIDENT SERVICES',x+9,y+3.35,z-b.d/2+.79,0,7);
+    box('walnut',x-8,y+2.7,z-b.d/2+.8,4.8,2.5,.16);box('sage',x-8,y+2.7,z-b.d/2+.9,4.5,2.2,.04);
+    for(let n=0;n<3;n++){box('paper',x-9.4+n*1.4,y+2.6,z-b.d/2+.94,1.1,1.4,.025);for(let row=0;row<4;row++)box('teal',x-9.4+n*1.4,y+2.9-row*.18,z-b.d/2+.965,.8,.025,.015);}
+    this.a.roomLabel('RESIDENTS / COMMUNITY NEWS',x-8,y+3.65,z-b.d/2+1,0,4.5);
+    plant(x+11.1,y+1.51,z-b.d*.2,.28);
+    box('paper',x+7.2,y+1.55,z-b.d*.2,.9,.07,.65);box('gold',x+8,y+1.56,z-b.d*.2+.5,.5,.08,.18);
   }
   apartment(b,f,side,y){
     const a=this.a,{box,cyl,ball,part,solid,plant,chair,table,sofa,fixture}=a;
@@ -44,12 +149,12 @@ window.EvercityResidences = class EvercityResidences {
     const variant=(Math.abs(Math.round(b.x/72))+f+(side>0?1:0))%3;
     const accent=['sage','teal','terracotta'][variant],wood=variant===1?'walnut':'woodLight';
     const emitters=[];
-    const B=(m,u,h,v,w,t,d)=>{const mesh=box(m,X(u),y+h,Z(v),w,t,d);if(m==='glow'&&mesh?.isMesh)emitters.push(mesh);return mesh;};
+    const B=(m,u,h,v,w,t,d)=>{const mesh=box(m,X(u),y+h,Z(v),w,t,d);if(m==='glow'&&mesh?.isMesh){emitters.push(mesh);mesh.userData.dynamicInterior=true;}return mesh;};
     const S=(u,v,w,d)=>solid(X(u),Z(v),w,d);
     const wall=(u,v,w,d,h=4.25)=>{B('plaster',u,h/2,v,w,h,d);S(u,v,w,d);B(wood,u,.16,v,w+.015,.2,d+.02);};
     const picture=(u,v,w,h,color)=>{B('walnut',u,2.55,v,w+.16,h+.16,.1);B('paper',u,2.55,v+.065,w,h,.035);B(color,u-.15,2.6,v+.09,w*.58,h*.63,.02);B('gold',u+.33,2.85,v+.115,w*.23,h*.32,.02);};
     const pendant=(u,v)=>{cyl('gold',X(u),y+4.7,Z(v),.025,1.4);part('cone',variant===2?'terracotta':'paper',X(u),y+4.05,Z(v),.55,.4,.55);const bulb=cyl('glow',X(u),y+3.86,Z(v),.34,.04);if(bulb?.isMesh)emitters.push(bulb);fixture(b,f,X(u),y+3.78,Z(v),100,'#ffdeb0');};
-    B('oak',width/2,.14,depth/2,width,.14,depth);
+    // Floor finishes are partitioned once by floor(), never layered per room.
     // Corridor wall, with a genuine 2.3m open apartment doorway (not a teleport).
     wall(0,(entry-1.2)/2,.18,entry-1.2);
     wall(0,(entry+1.2+depth)/2,.18,depth-entry-1.2);
@@ -57,8 +162,8 @@ window.EvercityResidences = class EvercityResidences {
     for(const dz of [-1.2,1.2])B(wood,0,1.8,entry+dz,.25,3.6,.1);
     B('gold',-.13,2.15,entry-1.7,.055,.45,.7);
     // Static room-number plaque, created for active floors only.
-    if(a.active())a.roomLabel(`${String(f+1).padStart(2,'0')}${side<0?'01':'02'} / ${['GARDEN','WALNUT','TERRACE'][variant]}`,X(-.18),y+2.4,Z(entry-1.8),side<0?Math.PI/2:-Math.PI/2);
-    b.units[f].push({side,entry:{x:X(1.3),z:Z(entry)},living:{x:X(3),z:Z(entry)},targets:{living:{x:X(3),z:Z(entry)},kitchen:{x:X(width-3.1),z:Z(split+4.8)},bedroom:{x:X(8),z:Z(split-2)},secondBedroom:{x:X(4.3),z:Z(10)},bathroom:{x:X(3),z:Z(3.9)}},width,depth,variant});
+    if(a.active())a.roomLabel(`${f+1}${side<0?'01':'02'} / ${['GARDEN','WALNUT','TERRACE'][variant]}`,X(-.18),y+2.4,Z(entry-1.8),side<0?Math.PI/2:-Math.PI/2);
+    b.units[f].push({side,origin,back,split,roomNumber:`${f+1}${side<0?'01':'02'}`,entry:{x:X(1.3),z:Z(entry)},living:{x:X(3),z:Z(entry)},targets:{living:{x:X(3),z:Z(entry)},kitchen:{x:X(width-3.1),z:Z(split+4.8)},bedroom:{x:X(8),z:Z(split-2)},secondBedroom:{x:X(4.3),z:Z(10)},bathroom:{x:X(3),z:Z(3.9)}},width,depth,variant});
     wall(width/2,0,width,.17);
     // Bedroom partition has a 2.2m door opening. All rooms remain reachable on foot.
     wall(1,split,2,.17);wall((4.2+width)/2,split,width-4.2,.17);B(wood,3.1,3.75,split,2.2,1.05,.18);
@@ -68,12 +173,12 @@ window.EvercityResidences = class EvercityResidences {
     // A separately partitioned second bedroom doubles as a home office.
     B(wood,1.5,.6,9.55,2.1,.65,4.1);S(1.5,9.55,2.1,4.1);B('linen',1.5,1,9.55,2,.24,4);B(accent,1.5,1.17,10.25,2.02,.1,2.4);B('paper',1.5,1.23,8.05,1.4,.2,.65);B(wood,1.5,1.3,7.44,2.15,1.8,.1);
     // Entry: stone threshold, shoe storage, coat hooks and a full-height mirror.
-    B('tile',1.25,.23,entry,2.5,.05,3.25);B(wood,1.05,.72,entry+2.8,1.9,1.25,.6);S(1.05,entry+2.8,1.9,.6);
+    B(wood,1.05,.72,entry+2.8,1.9,1.25,.6);S(1.05,entry+2.8,1.9,.6);
     B('stainless',.14,2.25,entry+4.2,.06,2.6,1.3);B('glassLight',.19,2.25,entry+4.2,.035,2.4,1.15);
     for(let n=0;n<3;n++)B('gold',.2,2.45,entry+2.1+n*.35,.28,.08,.06);
     // Living room: layered rug, sofa with cushions, low table, media wall and books.
     const livingV=depth-6.2,livingU=width*.58;
-    B('rug',livingU,.245,livingV-1,7.3,.05,6.5);sofa(X(livingU),y+.2,Z(livingV+1.1));
+    B('rug',livingU,.29,livingV-1,7.3,.05,6.5);sofa(X(livingU),y+.2,Z(livingV+1.1));
     for(const du of [-1.1,1.1])B(accent,livingU+du,1.36,livingV+1.08,.57,.48,.2);
     B(wood,livingU,.63,livingV-1.5,2.9,.28,1.6);S(livingU,livingV-1.5,2.9,1.6);
     for(const du of [-1.1,1.1])B('gold',livingU+du,.4,livingV-1.5,.08,.45,1.1);
@@ -84,7 +189,7 @@ window.EvercityResidences = class EvercityResidences {
     plant(X(width-1.1),y+.2,Z(depth-1.4),1.1);
     // Dining area and a kitchen with real cabinetry, sink, tap, induction hob and appliances.
     const kitchenV=split+2.1;
-    B('tile',width-2.15,.24,kitchenV+2.1,4.1,.04,5.9);
+    B('tile',width-2.8,2.07,kitchenV-.63,4.3,.92,.09);
     for(let n=0;n<4;n++){
       const u=width-4.4+n*1.05;B('kitchen',u,.82,kitchenV,1,1.4,1.15);B('gold',u,1.13,kitchenV+.59,.45,.035,.07);S(u,kitchenV,1,1.15);
       B(wood,u,3.15,kitchenV,1,1.12,.56);B('glow',u,2.56,kitchenV+.02,.85,.035,.3);
@@ -96,7 +201,20 @@ window.EvercityResidences = class EvercityResidences {
     for(const du of [-.25,.25])for(const dv of [-.22,.22])cyl('metal',X(width-1.55+du),y+1.66,Z(kitchenV+dv),.17,.015);
     cyl('stainless',X(width-1.8),y+1.84,Z(kitchenV+.2),.21,.32);
     B('stainless',width-1,3,kitchenV,1.5,.16,1);B('stainless',width-1,3.55,kitchenV,.55,1,.4);
-    B('stainless',width-.85,1.8,kitchenV+3.1,1.35,3.2,1.15);S(width-.85,kitchenV+3.1,1.35,1.15);B('dark',width-.85,1.6,kitchenV+3.69,1.3,.04,.02);B('metal',width-1.35,2.4,kitchenV+3.72,.05,.7,.05);
+    // A hollow refrigerator: the left panel slides over the right, entirely inside
+    // its footprint. Shelves and food are actually revealed, not a texture swap.
+    const fridgeU=width-.85,fridgeV=kitchenV+3.1;
+    S(fridgeU,fridgeV,1.35,1.15);
+    B('kitchen',fridgeU,1.8,fridgeV-.52,1.35,3.2,.1);
+    for(const du of [-.625,.625])B('stainless',fridgeU+du,1.8,fridgeV,.1,3.2,1.15);
+    for(const h of [.24,1,1.8,2.55,3.38])B('paper',fridgeU,h,fridgeV,1.24,.08,1.05);
+    for(let row=0;row<3;row++)for(let n=0;n<3;n++){
+      B(['paper','sage','terracotta'][n],fridgeU-.4+n*.38,1.19+row*.77,fridgeV+.1,.25,.32,.4);
+      B('gold',fridgeU-.4+n*.38,1.37+row*.77,fridgeV+.1,.23,.045,.32);
+    }
+    const fridgePanel=B('stainless',fridgeU-.32,1.8,fridgeV+.62,.65,3.12,.075);
+    const fridgeHandle=B('gold',fridgeU-.1,1.85,fridgeV+.7,.045,.65,.075);
+    B('stainless',fridgeU+.32,1.8,fridgeV+.52,.65,3.12,.07);
     // Dining table deliberately outside the entrance-to-bedroom circulation route.
     const diningU=5.2,diningV=split+2.9;table(X(diningU),y+.23,Z(diningV),2.9,1.7);
     for(const du of [-1,1]){chair(X(diningU+du),y+.23,Z(diningV+1.4),0,'linen');chair(X(diningU+du),y+.23,Z(diningV-1.4),Math.PI,'linen');cyl('paper',X(diningU+du),y+1.34,Z(diningV+.3),.28,.025);}
@@ -106,11 +224,21 @@ window.EvercityResidences = class EvercityResidences {
     B(wood,bedU,.63,bedV,3.75,.65,5);S(bedU,bedV,3.75,5);B('linen',bedU,1.02,bedV,3.65,.28,4.85);B(accent,bedU,1.2,bedV+1.05,3.66,.12,2.4);B(accent,bedU,1.5,bedV-2.55,3.95,1.85,.17);
     for(const du of [-.95,.95]){B('paper',bedU+du,1.29,bedV-1.75,1.42,.23,.77);B(wood,bedU+du*2.5,.66,bedV-1.7,.7,1.15,.85);cyl('gold',X(bedU+du*2.5),y+1.57,Z(bedV-1.7),.045,.65);part('cone','paper',X(bedU+du*2.5),y+1.99,Z(bedV-1.7),.32,.4,.32);}
     const wardrobeU=width-1;
-    for(let n=0;n<3;n++){B(wood,wardrobeU,1.7,split-4.4+n*1.1,1.2,3.25,1.03);B('gold',wardrobeU-.65,1.8,split-4.4+n*1.1,.07,.55,.06);S(wardrobeU,split-4.4+n*1.1,1.2,1.03);}
+    // Hollow wardrobe with sliding fronts, a hanging rail and folded clothing.
+    const wardrobeV=split-3.3;
+    S(wardrobeU,wardrobeV,1.2,3.25);B(wood,wardrobeU+.55,1.8,wardrobeV,.1,3.3,3.25);
+    for(const v of [wardrobeV-1.62,wardrobeV+1.62])B(wood,wardrobeU,1.8,v,1.2,3.3,.08);
+    for(const h of [.2,1,3.4])B(wood,wardrobeU,h,wardrobeV,1.2,.08,3.25);
+    B('gold',wardrobeU,2.9,wardrobeV,.045,.045,3.1);
+    for(let n=0;n<5;n++){B(['linen','sage','navy'][n%3],wardrobeU,2.14,wardrobeV-1.1+n*.45,.7,1.12,.18);B('gold',wardrobeU,2.77,wardrobeV-1.1+n*.45,.45,.04,.03);}
+    for(let n=0;n<3;n++)B(['paper','terracotta','linen'][n],wardrobeU,.4+n*.15,wardrobeV+.8,.8,.13,.6);
+    const cabinetPanel=B(wood,wardrobeU-.62,1.8,wardrobeV-.8,.07,3.22,1.6);
+    B(wood,wardrobeU-.52,1.8,wardrobeV+.8,.07,3.22,1.6);
+    const cabinetHandle=B('gold',wardrobeU-.68,1.8,wardrobeV-.16,.06,.6,.05);
     picture(bedU,.12,3.1,1.3,accent);
     table(X(2.4),y+.23,Z(split-2.3),2.8,1.1);chair(X(2.4),y+.23,Z(split-1.15),0,'linen');B('black',2.4,1.68,split-2.45,.9,.58,.05);B('paper',3.3,1.34,split-2.3,.5,.05,.65);
     // Bathroom: tiled floor, bathtub with water, shower glass, vanity, mirror, toilet and laundry.
-    B('tile',2.85,.24,3.5,5.5,.06,6.9);
+    B('tile',2.85,2.15,.13,5.5,3.8,.08);B('tile',5.68,2.15,3.5,.065,3.8,6.7);
     B('paper',1.8,.72,1.7,2.9,1.05,2.65);S(1.8,1.7,2.9,2.65);B('dark',1.8,1.27,1.7,2.55,.02,2.28);B('water',1.8,1.29,1.7,2.4,.015,2.13);
     cyl('stainless',X(.4),y+1.55,Z(.65),.05,.7);B('stainless',.65,1.9,.65,.55,.06,.07);
     B('lobbyGlass',3.38,2,1.6,.055,3.5,3);B('stainless',3.38,3.78,1.6,.06,.055,3);
@@ -118,7 +246,11 @@ window.EvercityResidences = class EvercityResidences {
     cyl('paper',X(1.1),y+.64,Z(5),.47,.9);B('paper',1.1,1.11,5,.9,.12,1.1);B('paper',1.1,1.15,4.4,.8,1.25,.24);S(1.1,5,.9,1.3);
     B('paper',4.7,.9,1.15,1.25,1.38,1.05);S(4.7,1.15,1.25,1.05);part('sphere','dark',X(4.7),y+.88,Z(1.71),.4,.4,.025);part('sphere','glassLight',X(4.7),y+.88,Z(1.74),.29,.29,.023);B('linen',4.7,1.63,1.15,.85,.12,.55);
     // Curtains, tracks and layered ceiling lights finish the inhabited feel.
-    for(const u of [.45,width-.5])for(let n=0;n<6;n++)B('linen',u+n*.085,2.62,depth-.22,.07,4.55,.24);
+    const curtainPanels=[];
+    for(const end of [0,1])for(let n=0;n<16;n++){
+      const mesh=B('linen',end?width-.45-n*.035:.45+n*.035,2.62,depth-.22+(n%2)*.045,.06,4.55,.12);
+      curtainPanels.push({mesh,end,n});
+    }
     B('gold',width/2,4.94,depth-.22,width,.05,.09);
     for(const [u,v] of [[livingU,livingV],[bedU,bedV],[2.8,4],[3,10]]){B('glow',u,5.05,v,1.3,.045,.7);fixture(b,f,X(u),y+4.85,Z(v),v===4?95:140,v===4?'#fff1d6':'#ffe5be');}
     // Finishing details: skirting/coving, electrical plates, ventilation, bedding, stationery and toiletries.
@@ -141,13 +273,101 @@ window.EvercityResidences = class EvercityResidences {
     B('rug',3.2,.31,3.45,1.4,.035,.62);
     B('paper',4.7,1.82,1.13,.7,.12,.5);B('teal',5.35,1.78,1.15,.21,.56,.26);B('gold',5.35,2.1,1.15,.15,.07,.16);
     for(const n of [0,1,2])B(['paper','sage','navy'][n],3.25,1.36+n*.04,split-2.3,.45,.035,.65);
+    // Inhabited details remain on existing furniture footprints, keeping circulation clear.
+    for(let n=0;n<7;n++)B(accent,livingU-1.1+n*.12,1.01,livingV+1.23,.08,.025,.95);
+    for(let n=0;n<8;n++)B('linen',bedU-1.6+n*.45,1.272,bedV+1.05,.018,.014,2.25);
+    for(const du of [-1,1]){B('linen',diningU+du,1.365,diningV+.3,.85,.012,.65);cyl('paper',X(diningU+du),y+1.395,Z(diningV+.3),.26,.02);B('stainless',diningU+du+.34,1.4,diningV+.3,.035,.018,.4);cyl('glassLight',X(diningU+du),y+1.56,Z(diningV-.2),.095,.28);}
+    // Espresso machine, cup stack and fruit on the kitchen counter.
+    B('dark',width-2.65,1.95,kitchenV,.5,.67,.5);B('stainless',width-2.65,1.75,kitchenV+.26,.52,.06,.24);
+    B('gold',width-2.65,2.03,kitchenV+.29,.17,.07,.19);cyl('paper',X(width-2.65),y+1.87,Z(kitchenV+.34),.085,.18);
+    for(let n=0;n<3;n++){cyl('paper',X(width-3.2),y+1.72+n*.12,Z(kitchenV-.22),.09,.1);}
+    // Desk keyboard, pencils, a framed print and a wall clock.
+    B('black',2.4,1.365,split-2.08,.85,.035,.26);
+    for(let row=0;row<3;row++)for(let n=0;n<8;n++)B('paper',2.07+n*.09,1.391,split-2.17+row*.075,.065,.009,.04);
+    cyl('terracotta',X(1.4),y+1.5,Z(split-2.55),.12,.3);
+    for(let n=0;n<4;n++)B(n%2?'gold':'navy',1.34+n*.045,1.7,split-2.55,.025,.45,.025);
+    const clockU=width*.55;part('sphere','walnut',X(clockU),y+3.35,Z(split+.13),.42,.42,.055);part('sphere','paper',X(clockU),y+3.35,Z(split+.19),.36,.36,.025);
+    B('dark',clockU,3.48,split+.23,.025,.25,.018);B('dark',clockU+.09,3.35,split+.23,.2,.025,.018);
+    for(let n=0;n<12;n++){const angle=n*Math.PI/6;B('gold',clockU+Math.sin(angle)*.29,3.35+Math.cos(angle)*.29,split+.23,.025,.035,.015);}
+    B('paper',.16,3.1,entry+3.8,.07,.5,.38);B('screen',.21,3.14,entry+3.8,.025,.22,.27);
+    this.suiteDetails({b,f,y,X,Z,B,S,width,depth,split,entry,livingU,livingV,bedU,bedV,kitchenV,wood,accent,variant});
+    // Laundry controls and a visible drum behind its glass port.
+    B('metal',4.7,1.4,1.71,1.08,.19,.025);const washerIndicator=B('mintGlow',4.95,1.4,1.735,.28,.09,.018);
+    part('sphere','stainless',X(4.34),y+1.4,Z(1.74),.07,.07,.02);
+    let drum=null;
     if(a.active()){
+      drum=new a.THREE.Group();drum.position.set(X(4.7),y+.88,Z(1.78));a.group().add(drum);
+      for(let n=0;n<3;n++){const cloth=B(['linen','sage','paper'][n],4.7+Math.sin(n*2.1)*.15,.88+Math.cos(n*2.1)*.15,1.78,.16,.13,.02);drum.attach(cloth);}
       const id=`${b.id}:${f}:${side}`,group=a.group(),interactive=a.interactions;
       interactive.door({id:id+':door',group,x:X(0),y,z:Z(entry-1.1),side,material:a.materials[wood],gold:a.materials.gold,b,f});
       interactive.switch({id:id+':light',b,f,side,x:X(.3),z:Z(entry+1.85),emitters});
       interactive.television({id:id+':tv',b,f,mesh:tvMesh,x:X(livingU),z:Z(livingV-4.55)});
       interactive.faucet({id:id+':tap',b,f,group,x:X(width-4),y:y+2.27,z:Z(kitchenV-.37)});
+      interactive.sliding({id:id+':curtain',b,f,x:X(width/2),z:Z(depth-.6),kind:'curtain',name:'リビングのカーテン',panels:curtainPanels,apply:(open,panels)=>{
+        const span=.56+(width/2-.46-.56)*(1-open);
+        for(const {mesh,end,n} of panels){const offset=.45+(n+.5)*span/16;mesh.position.x=X(end?width-offset:offset);mesh.scale.x=span/16*1.08;}
+      }});
+      interactive.sliding({id:id+':cabinet',b,f,x:X(wardrobeU-.9),z:Z(wardrobeV-.7),kind:'cabinet',name:'ワードローブ',panels:[cabinetPanel,cabinetHandle],apply:(open,panels)=>{panels[0].position.z=Z(wardrobeV-.8+open*1.55);panels[1].position.z=Z(wardrobeV-.16+open*1.55);}});
+      interactive.washer({id:id+':washer',b,f,x:X(4.7),z:Z(1.8),drum,indicator:washerIndicator});
+      interactive.sliding({id:id+':fridge',b,f,x:X(fridgeU-.2),z:Z(fridgeV+1),kind:'fridge',name:'冷蔵庫',initialOpen:false,panels:[fridgePanel,fridgeHandle],apply:(open,panels)=>{
+        panels[0].position.x=X(fridgeU-.32+open*.62);panels[1].position.x=X(fridgeU-.1+open*.62);
+      }});
+      for(const mesh of [tvMesh,washerIndicator,cabinetPanel,cabinetHandle,fridgePanel,fridgeHandle,...curtainPanels.map(p=>p.mesh)])mesh.userData.dynamicInterior=true;
     }
     this.roomsBuilt++;
+  }
+  suiteDetails({b,f,y,X,Z,B,S,width,depth,split,entry,livingU,livingV,bedU,bedV,kitchenV,wood,accent,variant}){
+    const {cyl,part,plant,fixture}=this.a;
+    // Window-side nook: the same safe furniture envelope, three distinct uses.
+    const nookU=5.3,nookV=depth-1.35;
+    S(nookU,nookV,3.6,1.2);
+    B(wood,nookU,.54,nookV,3.6,.62,1.2);B('linen',nookU,.94,nookV,3.5,.2,1.2);
+    B(accent,nookU,1.28,nookV+.44,3.6,.65,.18);
+    for(const du of [-1.15,1.15])B(accent,nookU+du,1.2,nookV,.6,.45,.22);
+    if(variant===0){
+      // Indoor herb garden and botanical prints.
+      for(let n=0;n<3;n++){plant(X(nookU-1+n),y+1.06,Z(nookV-.27),.24);B('paper',nookU-1+n,1.23,nookV-.45,.13,.16,.02);}
+    }else if(variant===1){
+      // Record player, speaker and a small collection of sleeves.
+      B('walnut',nookU,1.11,nookV,1.5,.13,.8);cyl('black',X(nookU),y+1.2,Z(nookV),.32,.025);cyl('gold',X(nookU),y+1.218,Z(nookV),.075,.013);
+      B('gold',nookU+.46,1.25,nookV-.05,.025,.04,.46);
+      B('black',nookU-1.35,1.25,nookV,.5,.48,.55);
+      for(let n=0;n<5;n++)B(['paper','teal','terracotta'][n%3],nookU+.8+n*.09,1.34,nookV,.045,.57,.56);
+    }else{
+      // Artist's corner: sketchbook, paint jars and folded textiles.
+      B('paper',nookU,1.09,nookV,1.1,.05,.7);B('residenceArt2',nookU,1.13,nookV,.9,.018,.57);
+      for(let n=0;n<4;n++)cyl(['sage','teal','terracotta','gold'][n],X(nookU-1+n*.22),y+1.22,Z(nookV),.08,.28);
+    }
+    // Floor lamp with a real registered light; its base has a furniture collider.
+    const lampU=width-2.7,lampV=depth-1.6;
+    cyl('walnut',X(lampU),y+.28,Z(lampV),.4,.12);cyl('gold',X(lampU),y+1.5,Z(lampV),.038,2.45);
+    part('cone','linen',X(lampU),y+2.78,Z(lampV),.54,.6,.54);B('glow',lampU,2.48,lampV,.36,.035,.36);S(lampU,lampV,.8,.8);fixture(b,f,X(lampU),y+2.44,Z(lampV),65,'#ffdb9e');
+    // Paneled media wall, acoustic slats and original framed artwork.
+    B(wood,livingU,2.4,livingV-4.92,5.8,4.2,.12);
+    for(let n=0;n<9;n++)B(accent,livingU-2.7+n*.16,2.4,livingV-4.81,.065,3.9,.08);
+    B('walnut',width-.23,2.85,depth-7.1,.1,2.7,2.9);B('paper',width-.3,2.85,depth-7.1,.04,2.53,2.73);B('residenceArt'+variant,width-.33,2.85,depth-7.1,.025,2.27,2.46);
+    // Room-specific ceiling perimeter, diffusers and smoke detector.
+    for(const v of [split+.4,depth-.65])B(wood,width/2,5.07,v,width-.6,.14,.12);
+    for(const u of [.5,width-.5])B(wood,u,5.07,(split+depth)/2,.12,.14,depth-split-1);
+    for(let n=0;n<7;n++)B('metal',2.2+n*.16,5.18,entry-2.8,.07,.025,.8);
+    cyl('paper',X(4),y+5.14,Z(entry-2.8),.18,.1);B('mintGlow',4,5.075,entry-2.8,.035,.012,.035);
+    // Bedroom headboard panels, bedside drawer seams, reading book and linen bench.
+    for(let n=0;n<8;n++)B(wood,bedU-2.3+n*.65,2.5,.22,.45,3.4,.12);
+    for(const du of [-2.375,2.375]){B('dark',bedU+du,.73,bedV-1.255,.61,.023,.025);B('gold',bedU+du,.92,bedV-1.23,.26,.035,.04);}
+    B('paper',bedU-2.375,1.27,bedV-1.6,.45,.06,.6);
+    // Small items are intentionally on existing surfaces, never across door paths.
+    B('linen',1.05,1.4,entry+2.8,.7,.09,.4);B('gold',1.45,1.43,entry+2.8,.15,.035,.15);
+    B('walnut',.16,2.8,entry+5.8,.09,1.6,1.3);B('residenceArt'+variant,.22,2.8,entry+5.8,.025,1.42,1.12);
+    // Kitchen backsplash rails, utensil rack, oven front and task-light diffuser.
+    B('stainless',width-2.7,2.3,kitchenV-.5,3.5,.045,.06);
+    for(let n=0;n<4;n++){B('gold',width-3.3+n*.35,2.15,kitchenV-.44,.035,.34,.035);part('sphere','stainless',X(width-3.3+n*.35),y+1.97,Z(kitchenV-.44),.09,.12,.035);}
+    B('black',width-1.25,.81,kitchenV+.6,.88,.7,.055);B('glassLight',width-1.25,.79,kitchenV+.64,.7,.46,.025);B('gold',width-1.25,1.16,kitchenV+.68,.65,.035,.07);
+    // Shower column, wall niche with bottles, towel warmer and vanity drain.
+    B('stainless',.28,2.7,1.7,.08,2.7,.08);B('stainless',.55,3.93,1.7,.65,.06,.06);B('stainless',.82,3.86,1.7,.48,.07,.4);
+    B(wood,2.35,2.65,.23,1.5,1.1,.13);B('dark',2.35,2.65,.31,1.34,.92,.035);
+    for(let n=0;n<3;n++){B(['paper','teal','terracotta'][n],1.9+n*.4,2.46,.45,.19,.35,.18);B('gold',1.9+n*.4,2.68,.45,.09,.09,.1);}
+    for(const u of [.3,1.6])B('stainless',u,2.35,7,.04,1.3,.07);
+    for(let n=0;n<5;n++)B('stainless',.95,1.8+n*.25,7,1.3,.04,.07);
+    B('linen',.95,2.18,6.9,.75,.63,.05);cyl('dark',X(4.73),y+1.696,Z(4.6),.055,.018);
   }
 };

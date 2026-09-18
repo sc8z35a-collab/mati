@@ -1,1 +1,53 @@
 #crosshair.has-target{opacity:1;width:17px;height:17px;border:1px solid #8ce4c6;border-radius:50%;box-shadow:0 0 14px #82e3c93d}#crosshair.has-target i{background:#8ce4c6;left:7px;top:7px;width:2px;height:2px}.traffic-panel{position:absolute;top:122px;right:35px;width:180px;padding:17px;background:rgba(15,34,39,.84);border:1px solid var(--line);border-radius:3px;backdrop-filter:blur(14px);pointer-events:none}.traffic-panel .eyebrow{font-size:10px;letter-spacing:1.5px}.signal-directions{display:flex;justify-content:space-between;gap:10px;margin-top:15px;font-size:10px;color:#afc7bf}.signal-directions b{font-size:10px;font-weight:500;display:inline-flex;align-items:center;gap:4px;margin-left:4px}.signal-directions b:before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}[data-state=green]{color:#83ebbc!important}[data-state=yellow]{color:#ffcd76!important}[data-state=red]{color:#f5a498!important}#walk-signal{margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line);font-size:10px;letter-spacing:.5px}#signal-countdown{font-family:'Barlow Condensed';color:#eef1df;letter-spacing:0}.apartment-feature{margin-top:15px;padding:15px;border:1px solid #82e3c93d;background:#82e3c90a;border-radius:3px;display:flex;align-items:center;justify-content:space-between;gap:15px}.apartment-feature small{display:block;color:var(--mint);font:10px 'Barlow Condensed';letter-spacing:2px;margin-bottom:6px}.apartment-feature strong{font-size:12px;font-weight:500}.apartment-feature button{padding:10px 12px;border:1px solid #82e3c960;border-radius:3px;color:var(--mint);font-size:11px;white-space:nowrap}@media(max-width:1050px){.traffic-panel{right:25px}}@media(max-width:600px){.traffic-panel{right:20px;top:143px;width:125px;padding:11px}.traffic-panel .eyebrow{font-size:8px;letter-spacing:.8px}.signal-directions{font-size:9px;margin-top:12px;gap:6px}.signal-directions b{font-size:9px;margin-left:2px;gap:3px}.signal-directions b:before{width:5px;height:5px}#walk-signal{font-size:8px;padding-top:8px;margin-top:9px}.apartment-feature{padding:11px;gap:8px}.apartment-feature strong{font-size:10px}.apartment-feature button{font-size:10px;padding:9px}.apartment-feature small{font-size:8px}}@media(max-height:650px) and (min-width:601px){.traffic-panel{top:95px}}
+
+/* Clear default view: information is available on demand in the menu. */
+#game.clear-screen .topbar,#game.clear-screen .explore-card,#game.clear-screen .compass,#game.clear-screen .traffic-panel,#game.clear-screen .residence-panel,#game.clear-screen .story-tools,#game.clear-screen .story-card,#game.clear-screen .minimap-panel,#game.clear-screen .bottom-bar,#game.clear-screen .touch-look-label,#game.clear-screen #run-button,#game.clear-screen #enter-button,#game.clear-screen #resume-button{display:none!important}
+#game.clear-screen .vignette{opacity:.3}
+#menu-button{position:absolute;z-index:30;top:max(14px,env(safe-area-inset-top));right:max(14px,env(safe-area-inset-right));width:44px;height:44px;border:1px solid #ffffff36;border-radius:50%;background:#152b3280;color:#eef3ee;display:grid;place-items:center;backdrop-filter:blur(8px)}
+#menu-button:hover{background:#152b32c9}
+#game.photo-mode #menu-button{display:none}
+#menu-dialog{width:450px;padding:25px}
+#menu-dialog h2{margin-top:12px;font-size:21px}
+#menu-dialog .menu-hint{font-size:11px;line-height:1.9;color:#b8c9c3}
+.menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:20px 0}
+.menu-grid button{min-height:46px;padding:10px;border:1px solid var(--line);border-radius:5px;background:#ffffff05;text-align:left;font-size:12px}
+.menu-grid button:hover{border-color:var(--mint);background:#82e3c912}
+.menu-grid button:disabled{opacity:.32;cursor:default}
+.menu-grid button[aria-pressed=true]{color:var(--mint);border-color:var(--mint)}
+#game.clear-screen #crosshair{display:none}
+#game.clear-screen #crosshair.has-target{display:block;width:5px;height:5px;background:#d8f4e4;border:0;box-shadow:0 0 4px #142b2f;border-radius:50%;opacity:.7}
+#game.clear-screen #crosshair i{display:none}
+#game.clear-screen .interaction{bottom:max(22px,env(safe-area-inset-bottom));top:auto;padding:8px 10px;gap:9px;border-radius:7px;max-width:calc(100% - 32px);background:#152b32a8;backdrop-filter:blur(8px)}
+#game.clear-screen .interaction .key{display:none}
+#game.clear-screen #interaction-label{font-size:11px;max-width:45vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#game.clear-screen #interact-button{min-width:78px;min-height:44px;font-size:11px}
+#game.clear-screen .toast{bottom:95px;top:auto;max-width:calc(100% - 32px);font-size:11px;padding:9px 14px}
+#game.clear-screen #touch-controls{display:block;pointer-events:none}
+#game.clear-screen #joystick{position:fixed;display:block;visibility:hidden;opacity:0;pointer-events:none;left:0;top:0;bottom:auto;width:112px;height:112px;border:1px solid #effffb66;border-radius:50%;background:#19363b36;transform:translate(-50%,-50%);transition:opacity .12s}
+#game.clear-screen #joystick.active{visibility:visible;opacity:1}
+#game.clear-screen #joystick-knob{width:40px;height:40px;position:absolute;left:35px;top:35px;background:#d6eee68a;border:1px solid #ffffff9c;border-radius:50%}
+@media(max-height:520px){#menu-dialog{padding:18px 22px}.menu-grid{grid-template-columns:repeat(3,1fr);margin:12px 0}.menu-grid button{font-size:11px}#menu-dialog .menu-hint{display:none}}
+
+/* Residential HUD prioritizes the room over city-wide progress. */
+.residence-panel{position:absolute;top:122px;right:35px;width:210px;padding:18px;text-align:left;background:linear-gradient(130deg,#173630ed,#10262bee);border:1px solid #bdd4b945;border-top:2px solid #d7be89;border-radius:3px;backdrop-filter:blur(14px)}
+.residence-panel .eyebrow{font-size:10px;letter-spacing:1.6px;color:#dfc894}
+.residence-panel strong{display:block;font-size:14px;font-weight:500;margin:16px 0 7px}
+#residence-palette{display:block;color:#b5cac0;font-size:9px;line-height:1.6}
+.residence-link{display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:12px;margin-top:13px;color:var(--mint);font-size:10px}
+.residence-panel:hover{border-color:var(--mint)}
+.residence-mode .explore-card,.residence-mode .story-card{display:none}
+.residence-mode .story-tools{top:302px;width:210px}
+.photo-mode .residence-panel{display:none!important}
+.residence-dialog{width:850px}
+.residence-layout{display:grid;grid-template-columns:1.1fr 1fr;gap:26px;margin-top:22px;align-items:start}
+#residence-map{width:100%;height:auto;border:1px solid var(--line);border-radius:3px;background:#10292b;display:block}
+.floor-legend{font-size:10px!important;text-align:center;color:#b7cabd}
+.equipment-heading{font-size:12px;color:#dcc69e;margin:0 0 8px;font-weight:500}
+#residence-equipment article{padding:10px 0;border-bottom:1px solid var(--line)}
+#residence-equipment article>div{display:flex;justify-content:space-between;gap:12px;align-items:center}
+#residence-equipment strong{font-size:11px;font-weight:500}
+#residence-equipment p{font-size:9px;line-height:1.65;margin:5px 0 0}
+.equipment-status{font:10px 'Noto Sans JP',sans-serif;color:var(--mint);background:#82e3c914;padding:3px 7px;border-radius:2px;white-space:nowrap}
+@media(max-width:1050px){.residence-panel{right:25px}}
+@media(max-width:600px){.residence-panel{top:143px;right:20px;width:174px;padding:13px}.residence-panel strong{font-size:12px;margin-top:12px}.residence-panel .eyebrow{font-size:9px}#residence-palette{font-size:8px}.residence-link{font-size:9px;padding-top:10px;margin-top:10px}.residence-mode .story-tools{top:297px;width:174px}.residence-layout{grid-template-columns:1fr;gap:18px;margin-top:15px}.residence-dialog h2{font-size:17px}.residence-dialog>p{font-size:11px}#residence-equipment article{padding:12px 0}.residence-mode .minimap-panel{bottom:237px}.residence-panel{min-height:44px}}
+@media(max-height:600px) and (min-width:601px){.residence-panel{top:105px;padding:12px;width:195px}.residence-panel strong{margin:9px 0 5px}.residence-mode .story-tools{top:262px;width:195px}.residence-dialog{max-height:90dvh}}

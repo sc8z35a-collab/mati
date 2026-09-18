@@ -23,7 +23,7 @@ window.EvercityInteractions = class EvercityInteractions {
   blocked(x,z,f,b){return this.doors.some(d=>d.f===f&&d.b===b&&this.doorHits(d,x,z));}
   switch({id,b,f,side,x,z,emitters=[]}){
     const state=this.state(id,{on:true});const fixtures=b.lights[f].filter(light=>Math.sign(light.x-b.x)===side);
-    const apply=()=>{fixtures.forEach(l=>{l.enabled=state.on;});emitters.forEach(m=>{if(m.material){if(!m.userData.offMaterial){m.userData.onMaterial=m.material;m.userData.offMaterial=this.own(m.material.clone());m.userData.offMaterial.emissiveIntensity=0;m.userData.offMaterial.color.set('#777368');}m.material=state.on?m.userData.onMaterial:m.userData.offMaterial;}});this.renderer.shadowMap.needsUpdate=true;};apply();
+    const apply=()=>{fixtures.forEach(l=>{l.enabled=state.on;});emitters.forEach(m=>{m.userData.dynamicInterior=true;if(m.material){if(!m.userData.offMaterial){m.userData.onMaterial=m.material;m.userData.offMaterial=this.own(m.material.clone());m.userData.offMaterial.emissiveIntensity=0;m.userData.offMaterial.color.set('#777368');}m.material=state.on?m.userData.onMaterial:m.userData.offMaterial;}});this.renderer.shadowMap.needsUpdate=true;};apply();
     this.add({id,b,f,x,z,radius:2.6,kind:'switch',state,label:()=>state.on?'住戸の照明を消す':'住戸の照明を点ける',activate:()=>{state.on=!state.on;apply();this.toast(state.on?'住戸の照明を点けました':'住戸の照明を消しました');return true;}});
   }
   television({id,b,f,mesh,x,z}){
@@ -45,14 +45,41 @@ window.EvercityInteractions = class EvercityInteractions {
     const ring=new T.Mesh(this.own(new T.RingGeometry(.035,.075,24)),this.own(new T.MeshBasicMaterial({color:'#ccf2e5',transparent:true,opacity:.6,side:T.DoubleSide,depthWrite:false})));ring.rotation.x=-Math.PI/2;ring.position.set(x,y-.57,z);group.add(ring);ring.visible=state.on;
     this.add({id,b,f,x,z,radius:2.9,kind:'faucet',state,label:()=>state.on?'キッチンの水を止める':'キッチンの水を出す',activate:()=>{state.on=!state.on;stream.visible=ring.visible=state.on;this.toast(state.on?'水を出しました':'水を止めました');return true;},animate:time=>{if(state.on){const pulse=(time*1.5)%1;ring.scale.setScalar(.7+pulse*2);ring.material.opacity=(1-pulse)*.65;stream.scale.x=stream.scale.z=.9+Math.sin(time*24)*.1;}}});
   }
+  // Sliding panels stay inside their cabinet/window footprint, so no new swing collision is needed.
+  sliding({id,b,f,x,z,kind,panels,apply,name,initialOpen=true}){
+    const state=this.state(id,{open:initialOpen});let amount=state.open?1:0;apply(amount,panels);
+    this.add({id,b,f,x,z,radius:3,kind,state,label:()=>`${name}を${state.open?'閉める':'開ける'}`,activate:()=>{state.open=!state.open;this.toast(`${name}を${state.open?'開けました':'閉めました'}`);return true;},animate:(_time,dt)=>{
+      const target=state.open?1:0;if(Math.abs(target-amount)<.001)return;
+      amount+=Math.sign(target-amount)*Math.min(Math.abs(target-amount),dt*.9);apply(amount,panels);this.renderer.shadowMap.needsUpdate=true;
+    }});
+  }
+  washer({id,b,f,x,z,drum,indicator}){
+    const state=this.state(id,{running:false,remaining:0,done:false,angle:0});
+    indicator.material=this.own(indicator.material.clone());
+    const paint=()=>{indicator.material.color.set(state.running?'#79e6c5':state.done?'#e8c878':'#34494a');indicator.material.emissive.set(state.running?'#327d68':'#000000');drum.rotation.z=state.angle;};paint();
+    this.add({id,b,f,x,z,radius:2.6,kind:'washer',state,refresh:paint,label:()=>state.running?`洗濯を一時停止（残り${Math.ceil(state.remaining)}秒）`:state.remaining>0?'洗濯を再開する':state.done?'洗濯物を取り出す':'洗濯機を回す（60秒）',activate:()=>{
+      if(state.done){state.done=false;this.toast('洗濯物を取り出しました');}
+      else {state.running=!state.running;if(state.running&&state.remaining<=0)state.remaining=60;this.toast(state.running?'洗濯を開始しました / この階にいる間、運転します':'洗濯を一時停止しました');}
+      paint();return true;
+    },animate:(_time,dt)=>{
+      if(!state.running)return;
+      state.remaining=Math.max(0,state.remaining-dt);state.angle=(state.angle+dt*(state.remaining>15?3:8))%(Math.PI*2);drum.rotation.z=state.angle;
+      if(state.remaining===0){state.running=false;state.done=true;paint();this.toast('洗濯が終わりました。洗濯機から取り出せます');}
+    }});
+    drum.rotation.z=state.angle;
+  }
+  snapshot(){return this.items.map(({id,kind,state,label})=>({id,kind,state:{...state},label:label()}));}
   lineClear(item){const p=this.player,dx=item.x-p.x,dz=item.z-p.z,dist=Math.hypot(dx,dz);const walls=(item.b.solids[item.f]||[]).filter(o=>o.w<.16||o.d<.16);for(let d=.2;d<dist-.25;d+=.18){const x=p.x+dx*d/dist,z=p.z+dz*d/dist;if(walls.some(o=>Math.abs(x-o.x)<o.w+.015&&Math.abs(z-o.z)<o.d+.015))return false;}return true;}
   nearest(){const p=this.player;let best=null,bestScore=Infinity;for(const item of this.items){if(item.b!==p.building||item.f!==p.floor)continue;const dx=item.x-p.x,dz=item.z-p.z,dist=Math.hypot(dx,dz);if(dist>item.radius)continue;const dot=dist>.1?(-Math.sin(p.yaw)*dx-Math.cos(p.yaw)*dz)/dist:1;if(dot<-.15&&dist>1.1)continue;if(item.kind!=='door'&&!this.lineClear(item))continue;const score=dist+(1-dot)*.7;if(score<bestScore){best=item;bestScore=score;}}return best;}
   use(item=this.nearest()){return item?item.activate():false;}
   update(dt){this.time+=dt;for(const d of this.doors){const target=d.state.open?d.side*Math.PI/2:0;if(Math.abs(target-d.angle)<.001)continue;const next=d.angle+Math.max(-dt*1.8,Math.min(dt*1.8,target-d.angle));if(!this.doorHits(d,this.player.x,this.player.z,.34,next)){d.angle=next;d.pivot.rotation.y=next;this.renderer.shadowMap.needsUpdate=true;}}
-    for(const item of this.items)item.animate?.(this.time);
+    for(const item of this.items)item.animate?.(this.time,dt);
   }
   selfTest(){const tests={},door=this.doors[0];if(door){tests.closedDoorSolid=this.doorHits(door,door.x,door.z+1,.32,0);tests.openDoorPassage=!this.doorHits(door,door.x,door.z+1,.32,door.side*Math.PI/2);}
     for(const kind of ['switch','tv','faucet']){const item=this.items.find(i=>i.kind===kind);if(!item){tests[kind+'Exists']=false;continue;}const key=kind==='tv'?'channel':'on',old=item.state[key];const times=kind==='tv'?3:2;item.activate();tests[kind+'ChangesState']=item.state[key]!==old;for(let n=1;n<times;n++)item.activate();tests[kind+'RestoresState']=item.state[key]===old;}
+    for(const kind of ['curtain','cabinet','fridge']){const item=this.items.find(i=>i.kind===kind);tests[kind+'Exists']=!!item;if(item){const old=item.state.open;item.activate();tests[kind+'ChangesState']=item.state.open!==old;item.activate();tests[kind+'RestoresState']=item.state.open===old;}}
+    const washer=this.items.find(i=>i.kind==='washer');tests.washerExists=!!washer;
+    if(washer){const saved={...washer.state};Object.assign(washer.state,{running:false,remaining:0,done:false});washer.activate();washer.animate(this.time,30);tests.washerAdvances=washer.state.running&&washer.state.remaining===30;washer.activate();washer.animate(this.time,5);tests.washerPauses=washer.state.remaining===30;washer.activate();washer.animate(this.time,30);tests.washerFinishes=washer.state.done&&!washer.state.running&&washer.state.remaining===0;washer.activate();tests.washerUnloads=!washer.state.done;Object.assign(washer.state,saved);washer.refresh();tests.washerRestoresState=Object.keys(saved).every(key=>washer.state[key]===saved[key]);}
     return tests;
   }
 };
