@@ -36,8 +36,12 @@
   mat('glass','#5e8b95',.2,.5,{emissive:'#4c737a',emissiveIntensity:.16});
   mat('glassLight','#88a9ae',.24,.4,{emissive:'#708d8b',emissiveIntensity:.1});
   mat('glassWarm','#a7a28e',.25,.35,{emissive:'#bba377',emissiveIntensity:.16});
+  // Exterior glazing is separate from opaque mirrors/appliance glass.
+  for(const [name,color] of [['facadeGlass','#b1d6d9'],['facadeGlassLight','#c7e1df'],['facadeGlassWarm','#e0d7ba']])
+    mat(name,color,.12,.08,{transparent:true,opacity:.14,depthWrite:false,side:T.FrontSide});
   mat('lobbyGlass','#afdcdd',.08,.15,{transparent:true,opacity:.16,depthWrite:false,side:T.DoubleSide});
   mat('glow','#f2dc9e',.4,0,{emissive:'#ffcc7a',emissiveIntensity:1});
+  mat('previewGlow','#ffe2b6',.6,0,{emissive:'#ffc67d',emissiveIntensity:.2});
   mat('mintGlow','#8de4cc',.3,0,{emissive:'#64cbb1',emissiveIntensity:.6});
   const boxGeo = new T.BoxGeometry(1,1,1);
   const cylinderGeo = new T.CylinderGeometry(1,1,1,9);
@@ -47,7 +51,8 @@
   const dummy = new T.Object3D();
   let activeBuildGroup=null, furnishingBuilding=null, furnishingFloor=0;
   const batchMeshes=new Map();
-  let hiddenWindows=[];
+  let hiddenPreviews=[];
+
   function furnitureSolid(x,z,w,d){if(furnishingBuilding)furnishingBuilding.solids[furnishingFloor].push({x,z,w:w/2,d:d/2});}
   function part(kind,key,x,y,z,sx,sy,sz,ry=0) {
     if(activeBuildGroup){
@@ -66,11 +71,11 @@
   const pick=a=>a[Math.floor(random()*a.length)];
   const buildings=[], parks=[], signs=[], obstacles=[], vehicles=[], people=[];
   const landmarks=[], streetFixtures=[];
-  let trafficSystem=null, lightingSystem=null, stories=null, environment=null;
+  let trafficSystem=null, lightingSystem=null, stories=null, environment=null, exterior=null;
   const interactions=new EvercityInteractions({THREE:T,player:null,renderer,toast});
   const fixture=(b,f,x,y,z,intensity=110,color='#ffe4bd')=>{b.lights[f].push({x,y,z,intensity,color});};
-  const residences=new EvercityResidences({THREE:T,materials,mat,box,cyl,ball,part,solid:furnitureSolid,plant,chair,table,sofa,bookcase,fixture,BASE:.32,FLOOR:5.6,active:()=>!!activeBuildGroup,group:()=>activeBuildGroup,interactions,roomLabel:(text,x,y,z,rotation)=>{
-    const mesh=label(text,x,y,z,1.9,'#eadfc7','#394c46',rotation);if(activeBuildGroup)activeBuildGroup.attach(mesh);
+  const residences=new EvercityResidences({THREE:T,materials,mat,box,cyl,ball,part,solid:furnitureSolid,plant,chair,table,sofa,bookcase,fixture,BASE:.32,FLOOR:5.6,active:()=>!!activeBuildGroup,group:()=>activeBuildGroup,interactions,roomLabel:(text,x,y,z,rotation,width=1.9)=>{
+    const mesh=label(text,x,y,z,width,'#eadfc7','#394c46',rotation);if(activeBuildGroup)activeBuildGroup.attach(mesh);
   }});
   const GRID=72, FLOOR=5.6, BASE=.32;
   const player={x:30,z:108,y:2.02,yaw:.28,pitch:.095,floor:0,building:null,velocityY:0,jump:0};
@@ -89,8 +94,9 @@
   function tree(x,z,scale=1,planter=true){
     if(planter){box('stone',x,.47,z,3.4,.5,3.4);box('soil',x,.74,z,2.9,.05,2.9);}
     cyl('trunk',x,2.2*scale,z,.19*scale,3.7*scale);
-    ball('leaf',x,4.8*scale,z,2.25*scale,2.65*scale,2.2*scale);
-    ball('leaf2',x+.65*scale,5.8*scale,z-.2,1.6*scale,1.65*scale,1.7*scale);
+    // Keep a compact shadow-casting canopy underneath the detailed leaf clusters.
+    ball('leaf',x,4.8*scale,z,1.65*scale,2.1*scale,1.6*scale);
+    exterior?.tree(x,z,scale);
     obstacle(x,z,.65,.65);
   }
   function plant(x,y,z,s=1){cyl('light',x,y+.37*s,z,.43*s,.74*s);ball('leaf',x,y+1.2*s,z,.55*s,.8*s,.55*s);ball('leaf2',x+.15*s,y+1.65*s,z,.36*s,.6*s,.36*s);}
@@ -108,15 +114,20 @@
     const y=BASE+floor*FLOOR, x=b.x,z=b.z,w=b.w,d=b.d;
     furnishingBuilding=b;furnishingFloor=floor;b.solids[floor]=[];b.lights[floor]=[];
     // A continuous walkable central aisle connects the doorway with the elevator.
-    box('light',x,y+.02,z,w-.6,.09,d-.6);
+    const detailedFloor=b.type==='residential'&&floor>0;
+    if(detailedFloor)residences.floor(b,floor);
+    else {const baseFloor=box('light',x,y+.02,z,w-.6,.09,d-.6);if(baseFloor.isMesh)baseFloor.userData.floorSurface='base';}
     for(const side of [-1,1]){
       if(floor===0)box('warm',x+side*(w/2-.28),y+2.35,z,.1,4.65,d-.65);
-      else {box('warm',x+side*(w/2-.28),y+.55,z,.1,1.1,d-.65);box('warm',x+side*(w/2-.28),y+4.85,z,.1,1.25,d-.65);box('lobbyGlass',x+side*(w/2-.2),y+2.8,z,.045,3.3,d-.7);}
+      else {box('warm',x+side*(w/2-.28),y+.55,z,.1,1.1,d-.65);box('warm',x+side*(w/2-.28),y+4.85,z,.1,1.25,d-.65);}
     }
-    if(floor>0)box('lobbyGlass',x,y+2.8,z+d/2-.2,w-.7,4.9,.045);
+    // Keep the single exterior pane; do not stack a second interior window.
     box('teal',x,y+2.35,z-d/2+.3,w-.6,4.65,.1);
-    box('dark',x,y+.08,z+1,5,.08,d-10);
-    box('gold',x-2.55,y+.13,z+1,.035,.03,d-10);box('gold',x+2.55,y+.13,z+1,.035,.03,d-10);
+    if(!detailedFloor){
+      const corridorFloor=box('dark',x,y+.08,z+1,5,.08,d-10);
+      if(corridorFloor.isMesh)corridorFloor.userData.floorSurface='corridor';
+      box('gold',x-2.55,y+.13,z+1,.035,.03,d-10);box('gold',x+2.55,y+.13,z+1,.035,.03,d-10);
+    }
     // Elevator core and operable front. Floor navigation is available on approach.
     box('concrete',x,y+2.45,z-d/2+2.7,6.6,4.9,4.7);
     box('dark',x,y+2,z-d/2+5.08,3.8,4,.16);
@@ -157,6 +168,32 @@
     }
     furnishingBuilding=null;
   }
+  // Low-cost silhouettes make glazed upper floors feel inhabited from the street.
+  // They share instanced primitive batches and are replaced, not layered, on entry.
+  function buildResidencePreview(b,f){
+    const y=BASE+f*FLOOR,refs=[];
+    const add=(key,x,h,z,w,t,d)=>refs.push(box(key,x,y+h,z,w,t,d));
+    for(const side of [-1,1]){
+      const width=b.w/2-4.1,depth=b.d-9.4,origin=b.x+side*3.4,back=b.z-b.d/2+7.2;
+      const X=u=>origin+side*u,Z=v=>back+v,split=depth*.44;
+      const fabric=['sage','teal','terracotta'][(Math.abs(Math.round(b.x/72))+f+(side>0?1:0))%3];
+      add('plaster',X(0),2.3,Z(depth/2),.18,4.2,depth);
+      add('plaster',X(width/2),2.3,Z(split),width,4.2,.17);
+      add('plaster',X(width/2),2.3,Z(0),width,4.2,.17);
+      add(fabric,X(width*.58),.65,Z(depth-5.1),3.5,.85,1.3);
+      add(fabric,X(width*.58),1.3,Z(depth-4.6),3.5,.65,.2);
+      add('woodLight',X(width*.58),.64,Z(depth-7.7),2.9,.25,1.6);
+      add('wood',X(width*.58),.7,Z(depth-10.8),5,1,.8);
+      add('black',X(width*.58),1.8,Z(depth-10.8),3.3,1.8,.1);
+      add('woodLight',X(5.2),1.2,Z(split+2.9),2.9,.14,1.7);
+      add('kitchen',X(width-2.8),.9,Z(split+2.1),4.3,1.4,1.2);
+      add('linen',X((6.5+width)/2),.9,Z(4.4),3.7,.55,4.9);
+      add(fabric,X((6.5+width)/2),1.22,Z(5.4),3.7,.08,2.4);
+      add('previewGlow',X(width*.58),5.04,Z(depth-6.2),1.3,.06,.7);
+      add('previewGlow',X((6.5+width)/2),5.04,Z(4.4),1.3,.06,.7);
+    }
+    b.previews[f]=refs;
+  }
   function makeBuilding(i,j){
     const x=i*GRID,z=j*GRID;
     const types=['residential','office','residential','hotel','shop','cafe','gallery','residential'];
@@ -173,10 +210,10 @@
     if(i===2&&j===1){name='CANAL HOUSE';jp='カナル・ハウス';type='residential';floors=14;w=44;d=43;special='NEW / DESIGN RESIDENCES';}
     if(i===-3&&j===0){name='AURORA HEIGHTS';jp='オーロラ・ハイツ';type='residential';floors=16;w=42;d=44;special='NEW / FAMILY SUITES';}
     if(type==='residential'){w=Math.max(w,42);d=Math.max(d,43);}
-    const b={id:`${i}:${j}`,x,z,w,d,floors,type,name,jp,height:floors*FLOOR,special,solids:{},windows:{},lights:{}};buildings.push(b);if(special)landmarks.push(b);
+    const b={id:`${i}:${j}`,x,z,w,d,floors,type,name,jp,height:floors*FLOOR,special,solids:{},windows:{},lights:{},slabs:{},previews:{}};buildings.push(b);if(special)landmarks.push(b);
     // Shadow-only massing preserves full facade detail without redrawing every window into the shadow map.
     const shadowProxy=new T.Mesh(boxGeo,new T.MeshBasicMaterial({colorWrite:false,depthWrite:false}));shadowProxy.position.set(x,BASE+b.height/2,z);shadowProxy.scale.set(w,b.height,d);shadowProxy.castShadow=true;b.shadowProxy=shadowProxy;scene.add(shadowProxy);
-    const facade=pick(['stone','concrete','warm','light']), glass=pick(['glass','glassLight','glass','glassWarm']);
+    const facade=pick(['stone','concrete','warm','light']), glass=pick(['facadeGlass','facadeGlassLight','facadeGlass','facadeGlassWarm']);
     box('paving',x,.14,z,54,.28,54);
     box('curb',x,.17,z+27,54,.34,.25);box('curb',x,.17,z-27,54,.34,.25);box('curb',x-27,.17,z,.25,.34,54);box('curb',x+27,.17,z,.25,.34,54);
     // Ground level has a real six-meter-wide open entrance, not a teleport door.
@@ -191,8 +228,12 @@
     label(name,x,BASE+3.63,z+d/2+2.68,Math.min(12,w*.6));
     for(let f=1;f<=floors;f++){
       const y=BASE+f*FLOOR;
-      box(facade,x,y,z,w+.5,.24,d+.5);
+      // Keep the structural slab below the floor datum: top = y - .04.
+      // Previously its top (y + .12) was coplanar with the corridor finish,
+      // and above the base finish (y + .065), causing flicker on upper floors.
+      b.slabs[f]=box(facade,x,y-.16,z,w+.5,.24,d+.5);
       if(f===floors)break;
+      if(type==='residential')buildResidencePreview(b,f);
       const paneH=FLOOR-.52;b.windows[f]=[];
       for(const side of [-1,1]){
         b.windows[f].push(box(glass,x+side*(w/2-.02),y+FLOOR/2,z,.11,paneH,d-.45));
@@ -200,7 +241,7 @@
       }
       for(let wx=-w/2+2;wx<w/2;wx+=3.6)for(const side of [-1,1]){
         box('dark',x+wx,y+FLOOR/2,z+side*d/2,.09,paneH,.12);
-        if(random()>.66)b.windows[f].push(box('glassWarm',x+wx-1.7,y+2.55,z+side*(d/2+.035),3.2,3.75,.025));
+        random(); // Preserve procedural layout seeds without overlapping tinted panes.
       }
       for(let dz=-d/2+2;dz<d/2;dz+=3.6)for(const side of [-1,1])box('dark',x+side*w/2,y+FLOOR/2,z+dz,.12,paneH,.09);
       if(f%4===0){box('dark',x,y-.3,z+d/2+.15,w,.24,.55);box('dark',x-w/2-.15,y-.3,z,.55,.24,d);}
@@ -291,22 +332,43 @@
   }
   const activeInterior=new T.Group();scene.add(activeInterior);
   const roomLight=new T.PointLight('#ffe5b5',0,55,1.5);scene.add(roomLight);
-  function clearActiveInterior(){interactions.clear();activeInterior.traverse(obj=>{if(obj.isMesh&&obj.userData.worldSign){obj.material.map.dispose();obj.material.dispose();obj.geometry.dispose();const index=signs.indexOf(obj);if(index>=0)signs.splice(index,1);}});activeInterior.clear();for(const win of hiddenWindows){win.mesh.setMatrixAt(win.index,win.matrix);win.mesh.instanceMatrix.needsUpdate=true;}hiddenWindows=[];}
-  function revealWindows(b,f){for(const ref of b.windows[f]||[]){const mesh=batchMeshes.get(ref.key);if(!mesh)continue;const matrix=new T.Matrix4();mesh.getMatrixAt(ref.index,matrix);hiddenWindows.push({mesh,index:ref.index,matrix});const hidden=new T.Matrix4().makeScale(0,0,0);mesh.setMatrixAt(ref.index,hidden);mesh.instanceMatrix.needsUpdate=true;}}
+  function hideResidencePreview(b,f){
+    for(const ref of b.previews[f]||[]){const mesh=batchMeshes.get(ref.key),matrix=new T.Matrix4();mesh.getMatrixAt(ref.index,matrix);hiddenPreviews.push({mesh,index:ref.index,matrix});mesh.setMatrixAt(ref.index,new T.Matrix4().makeScale(0,0,0));mesh.instanceMatrix.needsUpdate=true;}
+  }
+  function restoreResidencePreview(){for(const {mesh,index,matrix} of hiddenPreviews){mesh.setMatrixAt(index,matrix);mesh.instanceMatrix.needsUpdate=true;}hiddenPreviews=[];}
+  function clearActiveInterior(){restoreResidencePreview();interactions.clear();activeInterior.traverse(obj=>{if(obj.isInstancedMesh)obj.dispose();if(obj.isMesh&&obj.userData.worldSign){obj.material.map.dispose();obj.material.dispose();obj.geometry.dispose();const index=signs.indexOf(obj);if(index>=0)signs.splice(index,1);}});activeInterior.clear();}
+  function batchActiveInterior(){
+    // Only static direct children using shared primitive geometry can be instanced.
+    // Doors/drums are nested groups; panels, emitters, screens and floor-test meshes stay live.
+    const groups=new Map();
+    for(const mesh of [...activeInterior.children]){
+      if(!mesh.isMesh||mesh.userData.dynamicInterior||mesh.userData.floorSurface||mesh.userData.worldSign||mesh.material.transparent||![boxGeo,cylinderGeo,sphereGeo,coneGeo].includes(mesh.geometry))continue;
+      const key=`${mesh.geometry.uuid}/${mesh.material.uuid}`;
+      if(!groups.has(key))groups.set(key,[]);groups.get(key).push(mesh);
+    }
+    let components=0,batches=0;
+    for(const meshes of groups.values()){
+      if(meshes.length<2)continue;
+      const batch=new T.InstancedMesh(meshes[0].geometry,meshes[0].material,meshes.length);
+      meshes.forEach((mesh,i)=>{mesh.updateMatrix();batch.setMatrixAt(i,mesh.matrix);activeInterior.remove(mesh);});
+      batch.castShadow=true;batch.receiveShadow=true;batch.computeBoundingSphere();activeInterior.add(batch);components+=meshes.length;batches++;
+    }
+    activeInterior.userData.batching={components,batches};
+  }
   function loadFloor(b,f){
     clearActiveInterior();player.floor=f;player.building=b;player.jump=0;player.velocityY=0;
-    if(f>0&&f<b.floors){activeBuildGroup=activeInterior;interior(b,f);activeBuildGroup=null;revealWindows(b,f);}
+    if(f>0&&f<b.floors){activeBuildGroup=activeInterior;interior(b,f);activeBuildGroup=null;batchActiveInterior();hideResidencePreview(b,f);}
     player.x=b.x;player.z=b.z-b.d/2+(f===b.floors?10:8.5);player.y=BASE+f*FLOOR+1.7;player.yaw=Math.PI;player.pitch=0;
     closeDialogs();toast(`${b.jp} / ${floorName(b,f)}`);updateLocation();
   }
   function floorName(b,f){if(f===b.floors)return 'RF — ルーフトップ';if(f===0)return '1F — '+({office:'ロビー・ワークスペース',cafe:'カフェ',gallery:'アートギャラリー',hotel:'ゲストルーム',residential:'コンシェルジュ・ロビー',shop:'マーケット'})[b.type];if(b.type==='residential')return `${f+1}F — 2LDK住戸 × 2${f===b.floors-1?' / 最上階':''}`;if(f===b.floors-1)return `${f+1}F — スカイラウンジ`;return `${f+1}F — `+({office:'オフィス',cafe:'カフェラウンジ',gallery:'展示フロア',hotel:'ゲストルーム',residential:'レジデンス',shop:'ライフスタイルストア'})[b.type];}
-  function openElevator(){if(!nearbyElevator)return;const b=nearbyElevator;$('elevator-title').textContent=b.name;$('floor-list').replaceChildren();for(let f=b.floors;f>=0;f--){const btn=document.createElement('button');btn.textContent=floorName(b,f);if(f===player.floor)btn.style.borderColor='#82e3c9';btn.onclick=()=>loadFloor(b,f);$('floor-list').append(btn);}openDialog('elevator-dialog');}
+  function openElevator(){if(!nearbyElevator)return;const b=nearbyElevator;$('elevator-title').textContent=b.name;$('floor-list').replaceChildren();for(let f=b.floors;f>=0;f--){const btn=document.createElement('button');btn.textContent=floorName(b,f);if(f===player.floor){btn.setAttribute('aria-current','true');btn.style.borderColor='#82e3c9';}btn.onclick=()=>loadFloor(b,f);$('floor-list').append(btn);}openDialog('elevator-dialog');const selected=$('floor-list').querySelector('[aria-current]');selected?.focus({preventScroll:true});selected?.scrollIntoView({block:'nearest'});}
   function toast(text){clearTimeout(toastTimer);$('toast').textContent=text;$('toast').classList.remove('hidden');toastTimer=setTimeout(()=>$('toast').classList.add('hidden'),4200);}
   function updateDiscovery(){const count=buildings.filter(b=>discovered.has(b.id)).length;$('discovered-count').textContent=count;$('building-count').textContent=buildings.length;const pct=Math.round(count/buildings.length*100);$('explore-percent').textContent=pct+'%';$('discovery-bar').style.width=pct+'%';}
   function findBuilding(x,z){return buildings.find(b=>Math.abs(x-b.x)<b.w/2-.35&&Math.abs(z-b.z)<b.d/2-.35)||null;}
   function updateLocation(){
     currentBuilding=player.floor>0?player.building:findBuilding(player.x,player.z);
-    if(currentBuilding&&!discovered.has(currentBuilding.id)){discovered.add(currentBuilding.id);try{localStorage.setItem('evercity-exploration-v1',JSON.stringify([...discovered]));}catch(e){}updateDiscovery();toast(`NEW DISCOVERY / ${currentBuilding.jp} を発見`);}
+    if(currentBuilding&&!discovered.has(currentBuilding.id)){discovered.add(currentBuilding.id);try{localStorage.setItem('evercity-exploration-v1',JSON.stringify([...discovered]));}catch(e){}updateDiscovery();}
     let title='セントラル・ディストリクト',en='CENTRAL DISTRICT';
     const inPark=parks.find(p=>Math.abs(player.x-p.x)<28&&Math.abs(player.z-p.z)<28);
     if(inPark){title=inPark.x===0&&inPark.z===72?'セントラル・ガーデン':'ネイバーフッド・パーク';en='CENTRAL GARDEN';}
@@ -320,9 +382,42 @@
     if(nearbyElevator)$('interaction-label').textContent=`${player.floor===nearbyElevator.floors?'RF':player.floor+1+'F'} / エレベーター`;
     else if(storyItem)$('interaction-label').textContent=storyItem.label;
     else if(item)$('interaction-label').textContent=item.label();
-    $('interact-button').textContent=nearbyElevator?'階を選ぶ ↗':'操作する ↗';
+    $('interact-button').textContent=nearbyElevator?'↕':'◇';
+    $('interact-button').setAttribute('aria-label',$('interaction-label').textContent);
+    updateResidenceHUD();
     roomLight.intensity=0; // Illumination now comes from real ceiling fixtures, not a light following the camera.
   }
+  function residenceContext(){
+    const b=currentBuilding;
+    if(!b||b.type!=='residential'||player.floor<1||player.floor>=b.floors)return null;
+    const units=b.units[player.floor]||[];
+    const unit=units.find(u=>{const x=(player.x-u.origin)*u.side,z=player.z-u.back;return x>=0&&x<=u.width&&z>=0&&z<=u.depth;});
+    if(!unit)return {b,unit:null,room:'共用廊下'};
+    const u=(player.x-unit.origin)*unit.side,v=player.z-unit.back;
+    const room=v<unit.split?(u<5.8?(v<7.1?'バス・ランドリー':'書斎・第二寝室'):'主寝室'):u<2.5&&Math.abs(v-unit.depth*.72)<2?'玄関':u>unit.width-5.6&&v<unit.split+6?'キッチン':'リビング・ダイニング';
+    return {b,unit,room};
+  }
+  function updateResidenceHUD(){
+    const context=residenceContext();$('residence-panel').classList.toggle('hidden',!context);$('game').classList.toggle('residence-mode',!!context);
+    if(!context)return;
+    $('residence-room').textContent=context.room;
+    $('residence-unit').textContent=context.unit?context.unit.roomNumber+'号室':`${player.floor+1}F`;
+    $('residence-palette').textContent=context.unit?['GARDEN / セージの住まい','WALNUT / 木の温もり','TERRACE / テラコッタ'][context.unit.variant]:'2 RESIDENCES / エレベーターホール';
+  }
+  function openResidenceGuide(){
+    const context=residenceContext();if(!context){toast('住宅の2階以上で設備ガイドを開けます');return;}
+    const {b}=context,unit=context.unit||b.units[player.floor][0];
+    $('residence-title').textContent=`${b.jp} / ${unit.roomNumber}号室`;
+    $('residence-description').textContent='2LDK · '+['ガーデン','ウォルナット','テラコッタ'][unit.variant]+'の配色。設備の状態と操作方法を確認できます。';
+    const definitions={door:['玄関扉','玄関 / 開閉する範囲から離れて操作'],switch:['照明','玄関のスイッチ / 住戸全体を点灯・消灯'],tv:['テレビ','リビング / 都市番組・自然番組・OFF'],faucet:['キッチン水栓','キッチン / 水流と波紋を切り替え'],curtain:['カーテン','リビングの窓中央 / 左右に開閉'],cabinet:['ワードローブ','主寝室 / 引き戸を開けて衣類を見る'],washer:['洗濯機','浴室 / 運転・一時停止・取り出し'],fridge:['冷蔵庫','キッチン / スライド扉を開けて食品棚を見る']};
+    const list=$('residence-equipment');list.replaceChildren();
+    for(const item of interactions.snapshot().filter(i=>i.id.startsWith(`${b.id}:${player.floor}:${unit.side}:`))){
+      const [name,hint]=definitions[item.kind]||[item.kind,''];const row=document.createElement('article'),heading=document.createElement('div'),title=document.createElement('strong'),status=document.createElement('span'),note=document.createElement('p');
+      title.textContent=name;const s=item.state;status.textContent=item.kind==='tv'?['OFF','都市番組','自然番組'][s.channel]:item.kind==='washer'?(s.running?'運転中':s.done?'完了':s.remaining>0?'一時停止':'待機'):('open'in s?(s.open?'開':'閉'):s.on?'ON':'OFF');status.className='equipment-status';heading.append(title,status);note.textContent=hint;row.append(heading,note);list.append(row);
+    }
+    openDialog('residence-dialog');
+  }
+  $('residence-panel').onclick=openResidenceGuide;
   function blocked(x,z,dynamic=true,atFloor=player.floor,inBuilding=player.building){
     if(Math.abs(x)>329||Math.abs(z)>330)return true;
     const radius=.32;
@@ -344,6 +439,11 @@
   function move(dx,dz){const dist=Math.hypot(dx,dz);const steps=Math.max(1,Math.ceil(dist/.2));for(let n=0;n<steps;n++){if(!blocked(player.x+dx/steps,player.z))player.x+=dx/steps;if(!blocked(player.x,player.z+dz/steps))player.z+=dz/steps;}traveled+=dist;}
   const keys=new Set(),joy={x:0,y:0},pointer={drag:false,id:null,x:0,y:0,moved:0};
   const isTouch=matchMedia('(pointer: coarse)').matches;
+  let comfortMode=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function saveControls(){try{localStorage.setItem('evercity-controls-v1',JSON.stringify({sensitivity,fov:camera.fov,comfortMode}));}catch(e){}}
+  try{const saved=JSON.parse(localStorage.getItem('evercity-controls-v1')||'null');if(saved&&typeof saved==='object'){if(Number.isFinite(saved.sensitivity))sensitivity=T.MathUtils.clamp(saved.sensitivity,.5,2);if(Number.isFinite(saved.fov))camera.fov=T.MathUtils.clamp(saved.fov,55,95);if(typeof saved.comfortMode==='boolean')comfortMode=saved.comfortMode;}}catch(e){}
+  camera.updateProjectionMatrix();$('sensitivity').value=sensitivity;$('fov').value=camera.fov;$('comfort-mode').checked=comfortMode;
+  $('comfort-mode').onchange=e=>{comfortMode=e.target.checked;saveControls();};
   function dialogOpen(){return !!document.querySelector('dialog[open]');}
   function startGame(lock=false){started=true;$('enter-button').classList.add('hidden');if(lock&&!isTouch&&document.pointerLockElement!==$('world')){try{const promise=$('world').requestPointerLock();if(promise&&promise.catch)promise.catch(()=>{});}catch(e){}}}
   $('enter-button').onclick=()=>{startGame(!isTouch);toast(isTouch?'左スティックで移動 / 右側をスワイプで見回す':'WASDで移動 / Escでマウスを解放 / 建物の南側から入れます');};
@@ -352,31 +452,79 @@
     if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)){e.preventDefault();startGame();keys.add(e.code);}
     if(e.code.startsWith('Shift'))keys.add(e.code);
     if(e.repeat)return;
-    if(e.code==='KeyE')useNearby();if(e.code==='KeyM')openMap();
+    if(e.code==='KeyE')useNearby();if(e.code==='KeyF')toggleFullscreen();if(e.code==='KeyH')openResidenceGuide();
     if(e.code==='Space'&&player.jump===0)player.velocityY=4.6;
   });
   addEventListener('keyup',e=>keys.delete(e.code));addEventListener('blur',()=>{keys.clear();joy.x=joy.y=0;pointer.drag=false;resetJoystick();});
   const world=$('world');
-  world.addEventListener('pointerdown',e=>{if(dialogOpen())return;startGame();pointer.drag=true;pointer.id=e.pointerId;pointer.x=e.clientX;pointer.y=e.clientY;pointer.moved=0;if(!document.pointerLockElement)world.setPointerCapture(e.pointerId);});
-  world.addEventListener('pointermove',e=>{if(dialogOpen())return;if(document.pointerLockElement===world){player.yaw-=e.movementX*.002*sensitivity;player.pitch-=e.movementY*.002*sensitivity;}else if(pointer.drag&&pointer.id===e.pointerId){const dx=e.clientX-pointer.x,dy=e.clientY-pointer.y;player.yaw-=dx*.0032*sensitivity;player.pitch-=dy*.0032*sensitivity;pointer.moved+=Math.abs(dx)+Math.abs(dy);pointer.x=e.clientX;pointer.y=e.clientY;}player.pitch=T.MathUtils.clamp(player.pitch,-1.35,1.35);});
-  world.addEventListener('pointerup',e=>{if(pointer.id!==e.pointerId)return;pointer.drag=false;if(pointer.moved<4&&!isTouch)startGame(true);});world.addEventListener('pointercancel',()=>{pointer.drag=false;});
   let joyPointer=null;
-  function resetJoystick(){joy.x=joy.y=0;joyPointer=null;$('joystick-knob').style.transform='translate(0,0)';}
-  function setJoystick(e){const rect=$('joystick').getBoundingClientRect();let x=e.clientX-rect.left-rect.width/2,y=e.clientY-rect.top-rect.height/2;const l=Math.hypot(x,y),max=36;if(l>max){x=x/l*max;y=y/l*max;}joy.x=x/max;joy.y=y/max;$('joystick-knob').style.transform=`translate(${x}px,${y}px)`;}
-  $('joystick').addEventListener('pointerdown',e=>{e.preventDefault();startGame();joyPointer=e.pointerId;$('joystick').setPointerCapture(e.pointerId);setJoystick(e);});
-  $('joystick').addEventListener('pointermove',e=>{if(joyPointer===e.pointerId)setJoystick(e);});
-  ['pointerup','pointercancel','lostpointercapture'].forEach(type=>$('joystick').addEventListener(type,resetJoystick));
-  $('run-button').onclick=()=>{running=!running;$('run-button').classList.toggle('active',running);};
+  const joyOrigin={x:0,y:0};
+  function resetJoystick(){joy.x=joy.y=0;joyPointer=null;$('joystick').classList.remove('active');$('joystick-knob').style.transform='translate(0,0)';}
+  function setJoystick(e){let x=e.clientX-joyOrigin.x,y=e.clientY-joyOrigin.y;const l=Math.hypot(x,y),max=36;if(l>max){x=x/l*max;y=y/l*max;}const strength=Math.max(0,(Math.min(l/max,1)-.12)/.88),direction=Math.hypot(x,y)||1;joy.x=x/direction*strength;joy.y=y/direction*strength;$('joystick-knob').style.transform=`translate(${x}px,${y}px)`;}
+  world.addEventListener('pointerdown',e=>{
+    if(dialogOpen())return;startGame();
+    if(e.pointerType==='touch'&&e.clientX<innerWidth*.45){
+      if(joyPointer!==null)return;
+      joyPointer=e.pointerId;joyOrigin.x=e.clientX;joyOrigin.y=e.clientY;
+      const stick=$('joystick');stick.style.left=`${e.clientX-54}px`;stick.style.top=`${e.clientY-54}px`;stick.classList.add('active');
+      world.setPointerCapture(e.pointerId);setJoystick(e);return;
+    }
+    if(pointer.drag)return;
+    pointer.drag=true;pointer.id=e.pointerId;pointer.x=e.clientX;pointer.y=e.clientY;pointer.moved=0;
+    if(!document.pointerLockElement)world.setPointerCapture(e.pointerId);
+  });
+  world.addEventListener('pointermove',e=>{
+    if(dialogOpen())return;
+    if(e.pointerId===joyPointer){setJoystick(e);return;}
+    if(document.pointerLockElement===world){player.yaw-=e.movementX*.002*sensitivity;player.pitch-=e.movementY*.002*sensitivity;}
+    else if(pointer.drag&&pointer.id===e.pointerId){const dx=e.clientX-pointer.x,dy=e.clientY-pointer.y;player.yaw-=dx*.0032*sensitivity;player.pitch-=dy*.0032*sensitivity;pointer.moved+=Math.abs(dx)+Math.abs(dy);pointer.x=e.clientX;pointer.y=e.clientY;}
+    player.pitch=T.MathUtils.clamp(player.pitch,-1.35,1.35);
+  });
+  ['pointerup','pointercancel','lostpointercapture'].forEach(type=>world.addEventListener(type,e=>{
+    if(e.pointerId===joyPointer){resetJoystick();return;}
+    if(pointer.id!==e.pointerId)return;
+    pointer.drag=false;pointer.id=null;
+    if(type==='pointerup'&&pointer.moved<4&&e.pointerType==='mouse')startGame(true);
+  }));
+  document.addEventListener('visibilitychange',()=>{if(document.hidden){keys.clear();resetJoystick();pointer.drag=false;}});
+  $('run-button').onclick=()=>{running=!running;$('run-button').classList.toggle('active',running);$('run-button').setAttribute('aria-pressed',String(running));};
   function useNearby(){if(nearbyElevator)openElevator();else{if(!stories?.use())interactions.use();updateLocation();}}
   $('interact-button').onclick=useNearby;
-  function openDialog(id){keys.clear();resetJoystick();pointer.drag=false;if(document.pointerLockElement)document.exitPointerLock();if(!$(id).open)$(id).showModal();}
+  function openDialog(id){keys.clear();resetJoystick();pointer.drag=false;if(document.pointerLockElement)document.exitPointerLock();document.querySelectorAll('dialog[open]').forEach(d=>{if(d.id!==id)d.close();});if(!$(id).open)$(id).showModal();}
   function closeDialogs(){document.querySelectorAll('dialog[open]').forEach(d=>d.close());}
   document.querySelectorAll('.close-dialog').forEach(btn=>btn.onclick=()=>btn.closest('dialog').close());
   document.querySelectorAll('dialog').forEach(d=>d.addEventListener('click',e=>{if(e.target===d){const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)d.close();}}));
+  $('menu-button').onclick=()=>{
+    document.querySelector('[data-menu-action="residence-panel"]').disabled=!residenceContext();
+    document.querySelector('[data-menu-action="resume-button"]').disabled=$('resume-button').classList.contains('hidden');
+    const run=document.querySelector('[data-menu-action="run-button"]');run.textContent=running?'走る：ON':'走る：OFF';run.setAttribute('aria-pressed',String(running));
+    openDialog('menu-dialog');
+  };
+  document.querySelectorAll('[data-menu-action]').forEach(button=>button.onclick=()=>{closeDialogs();$(button.dataset.menuAction).click();});
   $('help-button').onclick=()=>openDialog('help-dialog');$('settings-button').onclick=()=>openDialog('settings-dialog');
-  $('fullscreen-button').onclick=()=>{if(document.fullscreenElement)document.exitFullscreen();else if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>toast('このブラウザでは全画面表示を利用できません'));else toast('このブラウザでは全画面表示を利用できません');};
-  $('sensitivity').oninput=e=>sensitivity=Number(e.target.value);
-  $('fov').oninput=e=>{camera.fov=Number(e.target.value);camera.updateProjectionMatrix();};
+  const fullscreenElement=()=>document.fullscreenElement||document.webkitFullscreenElement;
+  async function toggleFullscreen(){
+    keys.clear();resetJoystick();pointer.drag=false;$('fullscreen-status').textContent='';
+    try{
+      if(fullscreenElement()){
+        const exit=document.exitFullscreen||document.webkitExitFullscreen;
+        if(!exit)throw Error('Unsupported fullscreen');await exit.call(document);
+      }else{
+        const root=document.documentElement,request=root.requestFullscreen||root.webkitRequestFullscreen;
+        if(!request)throw Error('Unsupported fullscreen');await request.call(root);
+      }
+    }catch(error){
+      $('fullscreen-status').textContent='このブラウザでは全画面表示を開始できません。対応するブラウザで開くか、ホーム画面に追加して起動してください。';
+      openDialog('settings-dialog');
+    }
+    syncFullscreen();
+  }
+  function syncFullscreen(){const active=!!fullscreenElement(),button=$('fullscreen-button');button.setAttribute('aria-pressed',String(active));button.setAttribute('aria-label',active?'全画面を終了':'全画面表示');button.textContent=active?'⊡':'⛶';resizeWorld();}
+  $('fullscreen-button').onclick=toggleFullscreen;
+  document.addEventListener('fullscreenchange',syncFullscreen);
+  document.addEventListener('webkitfullscreenchange',syncFullscreen);
+  $('sensitivity').oninput=e=>{sensitivity=Number(e.target.value);saveControls();};
+  $('fov').oninput=e=>{camera.fov=Number(e.target.value);camera.updateProjectionMatrix();saveControls();};
   $('time-select').onchange=e=>setTime(e.target.value);
   function setTime(mode){
     timeMode=mode;const night=mode==='night',day=mode==='day';
@@ -384,6 +532,7 @@
     scene.fog.color.set(night?'#1c2c43':day?'#c7dfe5':'#b4c6c6');scene.fog.density=night?.0022:.00165;
     ambient.intensity=night?.34:day?1.7:1.25;ambient.color.set(night?'#7c9cc9':'#c3e5f4');sun.intensity=night?.28:day?3.1:3.2;sun.color.set(night?'#9db7e0':day?'#fff1d9':'#ffdda7');sun.position.set(day?90:-130,day?300:200,95);renderer.shadowMap.needsUpdate=true;
     for(const name of ['glass','glassLight','glassWarm'])materials[name].emissiveIntensity=night?(name==='glassWarm'?.95:.12):.09;
+    materials.previewGlow.emissiveIntensity=night?1.6:.2;
     materials.glow.emissiveIntensity=night?3.3:1;materials.mintGlow.emissiveIntensity=night?2:.6;
     $('clock').textContent=night?'21:08':day?'12:30':'16:42';$('weather-icon').textContent=night?'☾':'☀';$('weather-label').textContent=night?'晴れ / 19°C':'晴れ / 24°C';
     environment?.apply();
@@ -394,7 +543,7 @@
   function visitApartment(b,f=3,showcase=false){loadFloor(b,Math.min(f,b.floors-1));const unit=b.units[player.floor][0];player.x=unit.entry.x;player.z=unit.entry.z;player.yaw=Math.PI/2;player.pitch=-.04;if(showcase){player.x=b.x-3.4-2;player.z=b.z+b.d/2-4;player.yaw=.48;player.pitch=-.075;}startGame();updateLocation();toast(`${b.jp} / ${player.floor+1}階・家具付き2LDK`);}
   $('apartment-tour').onclick=()=>visitApartment(buildings.find(b=>b.name==='MAPLE COURT'));
   $('reset-position').onclick=()=>teleport(landmarks.find(b=>b.park));
-  function openMap(){drawMap($('city-map'),true);openDialog('map-dialog');}
+  function openMap(){} // Maps are disabled in the immersive exploration interface.
   $('map-button').onclick=openMap;$('landmarks-button').onclick=openMap;
   function setupLandmarks(){for(const b of landmarks){const button=document.createElement('button');const text=document.createElement('span');text.textContent=b.jp;const small=document.createElement('small');small.textContent=b.special;text.append(small);const arrow=document.createElement('span');arrow.textContent='↗';button.append(text,arrow);button.onclick=()=>teleport(b);$('landmark-list').append(button);}}
   function drawInteriorMap(canvas,b){
@@ -403,6 +552,16 @@
     for(const ob of b.solids[player.floor]||[]){ctx.fillStyle=ob.w<.2||ob.d<.2?'#a6b6a5':'#61776a';ctx.fillRect(px(ob.x-ob.w),pz(ob.z-ob.d),Math.max(1,ob.w*2*s),Math.max(1,ob.d*2*s));}
     for(const d of interactions.doors){ctx.strokeStyle='#e4c68f';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(px(d.x),pz(d.z));ctx.lineTo(px(d.x+Math.sin(d.angle)*2.2),pz(d.z+Math.cos(d.angle)*2.2));ctx.stroke();}
     for(const item of interactions.items){if(item.kind==='door')continue;ctx.fillStyle='#9aecd2';ctx.beginPath();ctx.arc(px(item.x),pz(item.z),1.7,0,Math.PI*2);ctx.fill();}
+    if(canvas.id==='residence-map'){
+      ctx.font='14px sans-serif';ctx.textAlign='center';
+      for(const unit of b.units?.[player.floor]||[]){
+        const X=u=>unit.origin+unit.side*u,Z=v=>unit.back+v;
+        for(const [text,u,v] of [['LDK',unit.width*.5,unit.depth-7],['主寝室',(6.5+unit.width)/2,8.5],['書斎',2.7,11],['浴室',2.5,3.6],['キッチン',unit.width-3,unit.split+5.5]]){
+          const x=px(X(u)),z=pz(Z(v));ctx.fillStyle='#10292beb';ctx.fillRect(x-30,z-10,60,20);ctx.fillStyle='#e0e8d6';ctx.fillText(text,x,z+5);
+        }
+        ctx.fillStyle='#e5cfa3';ctx.fillText(unit.roomNumber,px(X(unit.width*.5)),pz(Z(unit.depth-1)));
+      }ctx.textAlign='left';
+    }
     if(stories?.goal()?.b===b)stories.drawGoal(ctx,px,pz);
     ctx.save();ctx.translate(px(player.x),pz(player.z));ctx.rotate(-player.yaw);ctx.fillStyle='#b7ffe2';ctx.beginPath();ctx.moveTo(0,-6);ctx.lineTo(-4,4);ctx.lineTo(4,4);ctx.closePath();ctx.fill();ctx.restore();ctx.fillStyle='#b8cbbf';ctx.font='9px Arial';ctx.fillText((player.floor===b.floors?'RF':(player.floor+1)+'F')+' / FLOOR PLAN',10,12);ctx.fillText('N ↑',w-24,12);$('coordinates').textContent=(player.floor+1)+'F';
   }
@@ -445,16 +604,19 @@
       const dx=(-Math.sin(player.yaw)*forward+Math.cos(player.yaw)*strafe)*speed*dt,dz=(-Math.cos(player.yaw)*forward-Math.sin(player.yaw)*strafe)*speed*dt;
       if(len>.04){move(dx,dz);walkPhase+=dt*(speed>5?12:8);}
       player.velocityY-=12*dt;player.jump+=player.velocityY*dt;if(player.jump<0){player.jump=0;player.velocityY=0;}
-      player.y=BASE+player.floor*FLOOR+1.7+player.jump+(len>.04?Math.sin(walkPhase)*.035:0);
+      player.y=BASE+player.floor*FLOOR+1.7+player.jump+(len>.04&&!comfortMode?Math.sin(walkPhase)*.035:0);
     }
     camera.position.set(player.x,player.y,player.z);camera.rotation.set(player.pitch,player.yaw,0);sky.position.copy(camera.position);
     if(!dialogOpen()){trafficSystem?.update(dt);interactions.update(dt);stories?.update(dt);environment?.update(started?dt:0,!!currentBuilding&&player.floor<currentBuilding.floors);}
     lightingSystem?.update(dt,currentBuilding,timeMode);
+    exterior?.update(dt,player,timeMode);
     if(trafficSystem&&frameCount%8===0)updateTrafficHUD();
-    if(now-lastMap>180){updateLocation();drawMap($('minimap'));const deg=((player.yaw*180/Math.PI)%360+360)%360;const dirs=['N','NW','W','SW','S','SE','E','NE'];$('compass-direction').textContent=dirs[Math.round(deg/45)%8];lastMap=now;}
+    if(now-lastMap>180){updateLocation();const deg=((player.yaw*180/Math.PI)%360+360)%360;const dirs=['N','NW','W','SW','S','SE','E','NE'];$('compass-direction').textContent=dirs[Math.round(deg/45)%8];lastMap=now;}
     renderer.render(scene,camera);
   }
-  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+  function resizeWorld(){resetJoystick();pointer.drag=false;camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);}
+  addEventListener('resize',resizeWorld);
+  window.visualViewport?.addEventListener('resize',resizeWorld);
   world.addEventListener('webglcontextlost',e=>{e.preventDefault();$('loading').style.display='flex';$('loading').style.opacity='1';$('loading-text').textContent='3D描画が中断されました。ページを再読み込みしてください。';});
   function validateApartmentPaths(b,f){
     const step=.4,minX=b.x-b.w/2+.7,minZ=b.z-b.d/2+.7,nx=Math.ceil((b.w-1.4)/step),nz=Math.ceil((b.d-1.4)/step);
@@ -466,25 +628,82 @@
     const tests={twoRealApartments:b.units[f].length===2};b.units[f].forEach((u,i)=>{tests[`unit${i+1}_entrance`]=!!seen[index(u.entry.x,u.entry.z)];for(const [name,pos]of Object.entries(u.targets))tests[`unit${i+1}_${name}`]=!!seen[index(pos.x,pos.z)];});
     tests.ceilingFixtures=(b.lights[f]||[]).length>=10;return tests;
   }
+  function visualSelfTest(){
+    const matrix=new T.Matrix4(),position=new T.Vector3(),scale=new T.Vector3(),rotation=new T.Quaternion();
+    const slabBelowFinishes=buildings.every(b=>Object.entries(b.slabs).every(([f,ref])=>{batchMeshes.get(ref.key).getMatrixAt(ref.index,matrix);matrix.decompose(position,rotation,scale);return position.y+scale.y/2<BASE+Number(f)*FLOOR-.03;}));
+    const transparentFacades=buildings.every(b=>Object.values(b.windows).every(refs=>refs.length===4&&refs.every(ref=>{const m=batchMeshes.get(ref.key).material;return m.transparent&&m.opacity<=.2&&!m.depthWrite;})));
+    const previewCoverage=buildings.filter(b=>b.type==='residential').every(b=>Object.keys(b.previews).length===b.floors-1);
+    const previewSwitching=buildings.every(b=>Object.entries(b.previews).every(([f,refs])=>refs.every(ref=>{batchMeshes.get(ref.key).getMatrixAt(ref.index,matrix);const active=player.building===b&&player.floor===Number(f);return active?matrix.elements[0]===0:matrix.elements[0]>0;})));
+    return {previewCoverage,previewSwitching,slabBelowFinishes,transparentFacades,noDuplicateInteriorGlazing:!activeInterior.children.some(o=>o.material===materials.lobbyGlass&&Math.max(o.scale.x,o.scale.z)>10),mapsHidden:getComputedStyle(document.querySelector('.minimap-panel')).display==='none',floatingStickIdle:joyPointer!==null||getComputedStyle($('joystick')).visibility==='hidden'};
+  }
+  function validateFloorSurfaces(){
+    const matrix=new T.Matrix4(),slabTops=new Map();
+    for(const b of buildings)for(const [floor,ref] of Object.entries(b.slabs)){
+      const mesh=batchMeshes.get(ref.key);if(!mesh)continue;
+      mesh.getMatrixAt(ref.index,matrix);
+      slabTops.set(`${b.id}/${floor}`,matrix.elements[13]+Math.abs(matrix.elements[5])*.5);
+    }
+    const surfaces=[];activeInterior.traverse(mesh=>{if(mesh.userData.floorSurface)surfaces.push(mesh);});
+    const indoor=player.floor>0&&player.building&&player.floor<player.building.floors;
+    const top=indoor?slabTops.get(`${player.building.id}/${player.floor}`):null;
+    const base=surfaces.find(mesh=>mesh.userData.floorSurface==='base');
+    const corridor=surfaces.find(mesh=>mesh.userData.floorSurface==='corridor');
+    const surfaceTop=mesh=>mesh.position.y+mesh.scale.y*.5;
+    const residential=indoor&&player.building.type==='residential';
+    const layout=residential?surfaces.map(mesh=>mesh.userData.floorBounds):[];
+    const overlaps=(a,b)=>Math.min(a.x1,b.x1)-Math.max(a.x0,b.x0)>1e-6&&Math.min(a.z1,b.z1)-Math.max(a.z0,b.z0)>1e-6;
+    return {
+      allSlabsTracked:slabTops.size===buildings.reduce((n,b)=>n+b.floors,0),
+      slabsBelowFloorDatum:buildings.every(b=>Object.keys(b.slabs).every(f=>slabTops.get(`${b.id}/${f}`)<BASE+Number(f)*FLOOR-.03)),
+      oneActiveFloor:indoor?(residential?surfaces.length===residences.floorLayout(player.building).length:surfaces.length===2&&!!base&&!!corridor):surfaces.length===0,
+      finishesAboveSlab:!indoor||(surfaces.length>0&&surfaces.every(mesh=>mesh.position.y-mesh.scale.y*.5-top>.009)),
+      noOverlappingResidentialFinishes:!residential||layout.every((r,i)=>r&&layout.slice(i+1).every(s=>s&&!overlaps(r,s))),
+      completeResidentialFloor:!residential||Math.abs(layout.reduce((area,r)=>area+(r.x1-r.x0)*(r.z1-r.z0),0)-(player.building.w-.6)*(player.building.d-.6))<.001,
+      levelResidentialFinishes:!residential||surfaces.every(mesh=>Math.abs(surfaceTop(mesh)-(BASE+player.floor*FLOOR+.21))<.001),
+      currentFloorOnly:!indoor||surfaces.every(mesh=>Math.abs(mesh.position.y-(BASE+player.floor*FLOOR))<.2)
+    };
+  }
   // A read-only diagnostics hook enables reproducible in-browser validation.
-  window.evercity={getState:()=>({buildings:buildings.length,parks:parks.length,landmarks:landmarks.length,position:{x:player.x,y:player.y,z:player.z},floor:player.floor,inside:currentBuilding?.name||null,explored:discovered.size,frames:frameCount,residentialBuildings:buildings.filter(b=>b.type==='residential').length,apartmentCount:buildings.filter(b=>b.type==='residential').reduce((n,b)=>n+(b.floors-1)*2,0),traffic:trafficSystem?.snapshot(),lighting:lightingSystem?.snapshot(),story:stories?.data.active,storyProgress:stories?.data.progress,weather:environment?.weather}),selfTest:()=>{
+  window.evercity={release:'20260918.2',visualSelfTest,floorTest:validateFloorSurfaces,residenceSnapshot:()=>({room:residenceContext()?.room||null,unit:residenceContext()?.unit?.roomNumber||null,items:interactions.snapshot()}),getState:()=>({buildings:buildings.length,parks:parks.length,landmarks:landmarks.length,position:{x:player.x,y:player.y,z:player.z},floor:player.floor,inside:currentBuilding?.name||null,explored:discovered.size,frames:frameCount,residentialBuildings:buildings.filter(b=>b.type==='residential').length,apartmentCount:buildings.filter(b=>b.type==='residential').reduce((n,b)=>n+(b.floors-1)*2,0),traffic:trafficSystem?.snapshot(),lighting:lightingSystem?.snapshot(),story:stories?.data.active,storyProgress:stories?.data.progress,weather:environment?.weather,exterior:exterior?.snapshot(),render:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,pixelRatio:renderer.getPixelRatio()}}),exteriorTest:()=>exterior?.selfTest(),selfTest:()=>{
     const b=buildings.find(v=>v.name==='ATLAS TOWER');const old={...player};player.floor=0;
     const tests={buildingCount:buildings.length===76,allBuildingsHaveFloors:buildings.every(v=>v.floors>=4),atlasHas25Floors:b.floors===25,entrancePassable:!blocked(b.x,b.z+b.d/2),sideWallSolid:blocked(b.x+b.w/2,b.z),backWallSolid:blocked(b.x,b.z-b.d/2),elevatorCoreSolid:blocked(b.x,b.z-b.d/2+3),mapDestinations:landmarks.length===9,groundInteriors:scene.children.some(c=>c.isInstancedMesh)};
     player.floor=1;player.building=b;tests.upperFloorBoundary=blocked(b.x+b.w/2+1,b.z);tests.upperFloorAisle=!blocked(b.x,b.z);Object.assign(player,old);return tests;
   }};
+  // Explicit opt-in inspection controls for regression tests, never used by gameplay.
+  if(new URLSearchParams(location.search).get('test')==='1')window.evercity.debug={
+    buildings:()=>buildings.map(({id,name,type,w,d,floors})=>({id,name,type,w,d,floors})),
+    load:(id,f)=>{const b=buildings.find(b=>b.id===id);if(!b||!Number.isInteger(f)||f<0||f>b.floors)throw new Error('Invalid test floor');loadFloor(b,f);},
+    paths:()=>validateApartmentPaths(player.building,player.floor),
+    interactions:()=>interactions.selfTest(),
+    batching:()=>({...activeInterior.userData.batching,meshes:activeInterior.children.length}),
+    units:()=>JSON.parse(JSON.stringify(player.building?.units?.[player.floor]||[])),
+    pose:(x,z,yaw,pitch=0)=>{player.x=x;player.z=z;player.yaw=yaw;player.pitch=pitch;updateLocation();},
+    use:id=>interactions.use(interactions.items.find(item=>item.id===id)),
+    step:dt=>interactions.update(dt),
+    resources:()=>({geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,signs:signs.length}),
+    floorGeometry:()=>activeInterior.children.filter(m=>m.userData.floorSurface).map(m=>({position:m.position.toArray(),scale:m.scale.toArray(),bounds:m.userData.floorBounds}))
+  };
   setTimeout(()=>{
     try{
-      createCity();flushBatches();traffic();trafficSystem=new EvercityTraffic({THREE:T,scene,vehicles,people,player,staticBlocked:(x,z)=>blocked(x,z,false,0,null)});lightingSystem=new EvercityLighting({THREE:T,scene,renderer,player,streetFixtures,vehicles,ambient,sun});setupLandmarks();updateDiscovery();updateLocation();drawMap($('minimap'));setTime('golden');
+      exterior=new EvercityExterior({THREE:T,scene,renderer,materials,obstacle,sun});
+      createCity();buildings.forEach(b=>exterior.building(b));parks.forEach(p=>exterior.park(p));exterior.waterfront();exterior.flush();
+      const qualitySelect=$('quality-select');qualitySelect.value=exterior.quality;
+      const updateDetailStatus=()=>{$('detail-status').textContent=exterior.snapshot().components.toLocaleString('ja-JP')+'点の追加外観パーツ / 76棟・5公園。近距離優先の描画で負荷を抑えます。';};
+      qualitySelect.onchange=e=>{exterior.setQuality(e.target.value);exterior.update(1,player,timeMode);updateDetailStatus();};updateDetailStatus();
+      flushBatches();traffic();trafficSystem=new EvercityTraffic({THREE:T,scene,vehicles,people,player,staticBlocked:(x,z)=>blocked(x,z,false,0,null)});lightingSystem=new EvercityLighting({THREE:T,scene,renderer,player,streetFixtures,vehicles,ambient,sun});setupLandmarks();updateDiscovery();updateLocation();setTime('golden');
       environment=new EvercityEnvironment({THREE:T,scene,renderer,player,materials,sun,ambient,skyUniforms,getTime:()=>timeMode,setTime,toast});
       stories=new EvercityStories({THREE:T,scene,renderer,camera,player,materials,buildings,label,toast,openDialog,closeDialogs,dialogOpen,start:()=>startGame(),started:()=>started,current:()=>currentBuilding,loadFloor,teleport,blocked,setTime,getTime:()=>timeMode,environment:()=>environment});
       camera.position.set(player.x,player.y,player.z);camera.rotation.set(player.pitch,player.yaw,0);
-      $('loading').style.opacity='0';$('loading').style.display='none';$('game').dataset.ready='true';previous=performance.now();requestAnimationFrame(animate);
+      $('loading').style.opacity='0';$('loading').style.display='none';$('game').dataset.ready='true';startGame();previous=performance.now();requestAnimationFrame(animate);
+      console.info('EVERCITY visual tests',JSON.stringify(visualSelfTest()));
       console.info('EVERCITY self-tests',JSON.stringify(window.evercity.selfTest()));
       console.info('EVERCITY traffic tests',JSON.stringify(EvercityTraffic.selfTest()));
+      console.info('EVERCITY exterior tests',JSON.stringify(exterior.selfTest()));
       console.info('EVERCITY living city',JSON.stringify({residences:buildings.filter(b=>b.type==='residential').length,apartments:buildings.filter(b=>b.type==='residential').reduce((n,b)=>n+2*(b.floors-1),0),intersections:trafficSystem.intersections.length,streetFixtures:streetFixtures.length}));
       const params=new URLSearchParams(location.search);if(params.get('view')==='night'){setTime('night');$('time-select').value='night';}if(params.get('spot')){const b=landmarks.find(v=>v.name.toLowerCase().includes(params.get('spot').toLowerCase()));if(b)teleport(b);}if(params.has('floor')&&params.get('spot')){const b=landmarks.find(v=>!v.park&&v.name.toLowerCase().includes(params.get('spot').toLowerCase()));if(b){loadFloor(b,Math.max(0,Math.min(b.floors,parseInt(params.get('floor'),10)||0)));startGame();if(b.type==='residential'&&player.floor>0&&player.floor<b.floors&&params.get('room')==='living')visitApartment(b,player.floor,true);}}
       if(params.get('weather'))environment.setWeather(params.get('weather'));if(params.get('camera')==='1')stories.toggleCamera(true);if(params.get('journal')==='1')stories.openJournal();if(params.get('resume')==='1')stories.resume();
-      lightingSystem.update(1,currentBuilding,timeMode);updateTrafficHUD();stories.renderHUD();
+      lightingSystem.update(1,currentBuilding,timeMode);updateTrafficHUD();stories.renderHUD();startGame();
+      if(params.get('test')==='1')console.info('EVERCITY floor surface tests',JSON.stringify(validateFloorSurfaces()));
       if(params.get('test')==='1'){console.info('EVERCITY story tests',JSON.stringify(stories.selfTest()));console.info('EVERCITY weather tests',JSON.stringify(environment.selfTest()));}
       if(currentBuilding?.type==='residential'&&player.floor>0&&player.floor<currentBuilding.floors){console.info('EVERCITY apartment paths',JSON.stringify(validateApartmentPaths(currentBuilding,player.floor)));if(params.get('test')==='1')console.info('EVERCITY interaction tests',JSON.stringify(interactions.selfTest()));}
     }catch(err){console.error('City initialization failed',err);$('loading-text').textContent='街の読み込み中にエラーが発生しました。ページを再読み込みしてください。';}
