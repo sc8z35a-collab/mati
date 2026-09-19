@@ -5,6 +5,7 @@ window.EvercityExterior = class EvercityExterior {
     Object.assign(this, { T, scene, renderer, materials, obstacle, sun });
     this.seed = 482731;
     this.batches = new Map();
+    this.roughnessMaps = new WeakMap();
     this.meshes = [];
     this.counts = {};
     this.elapsed = 1;
@@ -89,6 +90,66 @@ window.EvercityExterior = class EvercityExterior {
         ctx.bezierCurveTo(140, y - 10, 300, y + 20, 512, y + 5);
         ctx.stroke();
       }
+    } else if (kind === "plaster") {
+      for (let i = 0; i < 160; i++) {
+        const x = this.random() * 512,
+          y = this.random() * 512;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, 32);
+        g.addColorStop(0, "rgba(116,109,90,.045)");
+        g.addColorStop(1, "rgba(116,109,90,0)");
+        ctx.fillStyle = g;
+        ctx.fillRect(x - 32, y - 32, 64, 64);
+      }
+    } else if (kind === "grass") {
+      for (let i = 0; i < 14000; i++) {
+        const x = this.random() * 512,
+          y = this.random() * 512;
+        ctx.strokeStyle = this.pick([
+          "#c1c9a5",
+          "#9daa85",
+          "#dde0bb",
+          "#7c906e",
+        ]);
+        ctx.lineWidth = 0.7 + this.random();
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + this.random() * 5 - 2.5, y - 2 - this.random() * 7);
+        ctx.stroke();
+      }
+    } else if (kind === "metal") {
+      for (let i = 0; i < 900; i++) {
+        ctx.fillStyle = `rgba(65,73,70,${this.random() * 0.12})`;
+        ctx.fillRect(
+          this.random() * 512,
+          this.random() * 512,
+          8 + this.random() * 60,
+          0.6,
+        );
+      }
+    } else if (kind === "canvas") {
+      // Fine warp/weft stays in physical scale; mipmaps soften it in the distance.
+      for (let n = 0; n < 512; n += 4) {
+        ctx.fillStyle = "rgba(83,76,59,.12)";
+        ctx.fillRect(n, 0, 1, 512);
+        ctx.fillStyle = "rgba(255,255,245,.22)";
+        ctx.fillRect(0, n, 512, 1);
+      }
+    } else if (kind === "asphalt") {
+      // Small repaired fissures, not a high-contrast tiled crack grid.
+      for (let i = 0; i < 4; i++) {
+        let x = 50 + this.random() * 320,
+          y = 50 + this.random() * 320;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        for (let n = 0; n < 6; n++) {
+          x += this.random() * 22 - 11;
+          y += this.random() * 18;
+          ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = "rgba(38,44,43,.23)";
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
     } else if (kind === "wood") {
       for (let i = 0; i < 280; i++) {
         ctx.strokeStyle = `rgba(78,59,35,${this.random() * 0.18})`;
@@ -118,6 +179,14 @@ window.EvercityExterior = class EvercityExterior {
     material.map = texture;
     material.bumpMap = texture;
     material.bumpScale = bump;
+    // Separate linear data texture: albedo stays sRGB, roughness must not be decoded.
+    if (!this.roughnessMaps.has(texture)) {
+      const roughness = texture.clone();
+      roughness.colorSpace = this.T.NoColorSpace;
+      roughness.needsUpdate = true;
+      this.roughnessMaps.set(texture, roughness);
+    }
+    material.roughnessMap = this.roughnessMaps.get(texture);
     // Planar UVs in world meters prevent giant stretched road/building textures.
     material.onBeforeCompile = (shader) => {
       shader.vertexShader = shader.vertexShader.replace(
@@ -137,6 +206,9 @@ window.EvercityExterior = class EvercityExterior {
         #endif
         #ifdef USE_BUMPMAP
           vBumpMapUv = detailUv / ${meters.toFixed(3)};
+        #endif
+        #ifdef USE_ROUGHNESSMAP
+          vRoughnessMapUv = detailUv / ${meters.toFixed(3)};
         #endif`,
       );
     };
@@ -150,15 +222,25 @@ window.EvercityExterior = class EvercityExterior {
       stone = this.surface("stone"),
       asphalt = this.surface("asphalt"),
       brick = this.surface("brick"),
-      wood = this.surface("wood");
+      wood = this.surface("wood"),
+      plaster = this.surface("plaster"),
+      grass = this.surface("grass"),
+      metal = this.surface("metal"),
+      canvas = this.surface("canvas");
     this.worldTexture(m.road, asphalt, 4, 0.045);
     m.road.color.set("#454d51");
     this.worldTexture(m.paving, pavers, 3.2, 0.028);
-    for (const k of ["stone", "concrete", "warm", "light", "curb"])
+    for (const k of ["stone", "concrete", "curb"])
       this.worldTexture(m[k], stone, 2, 0.022);
+    for (const k of ["warm", "light"])
+      this.worldTexture(m[k], plaster, 2.6, 0.018);
+    for (const k of ["grass", "grass2"])
+      this.worldTexture(m[k], grass, 1.6, 0.045);
     for (const k of ["wood", "woodLight", "trunk"])
       this.worldTexture(m[k], wood, 1.8, 0.028);
     this.m = {
+      render: new T.MeshStandardMaterial({ color: "#ffffff", roughness: 0.94 }),
+      fabric: new T.MeshStandardMaterial({ color: "#ffffff", roughness: 1 }),
       masonry: new T.MeshStandardMaterial({
         color: "#ffffff",
         roughness: 0.86,
@@ -193,8 +275,31 @@ window.EvercityExterior = class EvercityExterior {
       }),
       sign: new T.MeshStandardMaterial({ color: "#ffffff", roughness: 0.68 }),
     };
-    this.worldTexture(this.m.masonry, brick, 2.4, 0.045);
+    this.worldTexture(this.m.masonry, brick, 1.2, 0.032);
+    this.worldTexture(this.m.render, plaster, 2.6, 0.018);
+    this.worldTexture(this.m.trim, metal, 0.8, 0.008);
     this.worldTexture(this.m.timber, wood, 1.8, 0.035);
+    this.worldTexture(this.m.fabric, canvas, 0.65, 0.007);
+    // A tiny shared contact-shade decal keeps street props grounded even when
+    // BALANCED disables detail shadows. This is a static approximation, not SSAO.
+    const contact = this.canvas(64),
+      shade = contact.getContext("2d");
+    const falloff = shade.createRadialGradient(32, 32, 6, 32, 32, 31);
+    falloff.addColorStop(0, "rgba(255,255,255,0.7)");
+    falloff.addColorStop(0.45, "rgba(255,255,255,0.45)");
+    falloff.addColorStop(1, "rgba(255,255,255,0)");
+    shade.fillStyle = falloff;
+    shade.fillRect(0, 0, 64, 64);
+    this.m.contact = new T.MeshBasicMaterial({
+      map: this.texture(contact),
+      color: "#27342b",
+      transparent: true,
+      opacity: 0.45,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+    });
     const c = this.canvas(128),
       ctx = c.getContext("2d");
     // One alpha-cutout branch card contains many individual leaves, not a solid billboard.
@@ -254,6 +359,7 @@ window.EvercityExterior = class EvercityExterior {
       a.fillText(p[2], x + 256, y + 202, 470);
     });
     this.m.sign.map = this.texture(atlas);
+    this.makeDetailAtlas();
     for (let i = 0; i < 8; i++) {
       const g = new T.PlaneGeometry(1, 1),
         uv = g.attributes.uv;
@@ -265,6 +371,60 @@ window.EvercityExterior = class EvercityExterior {
         );
       this.geometry["sign" + i] = g;
     }
+  }
+  makeDetailAtlas() {
+    // One shared atlas for address tiles, opening hours, menus and garden labels.
+    const c = this.canvas(1024),
+      ctx = c.getContext("2d");
+    const labels = [
+      ["01", "CENTRAL AVENUE", "EVERCITY"],
+      ["02", "GARDEN STREET", "EVERCITY"],
+      ["03", "CANAL WALK", "EVERCITY"],
+      ["04", "MAPLE LANE", "EVERCITY"],
+      ["DAILY MENU", "ESPRESSO  3.50", "SOURDOUGH  5.00"],
+      ["WELCOME", "MON — SUN", "08:00 — 20:00"],
+      ["FORM / 26", "SCULPTURE GARDEN", "PLEASE DO NOT CLIMB"],
+      ["HERB GARDEN", "ROSEMARY / SAGE", "GROWN WITH CARE"],
+    ];
+    labels.forEach((lines, i) => {
+      const x = (i % 2) * 512,
+        y = Math.floor(i / 2) * 256;
+      ctx.fillStyle = i < 4 ? "#e1d9c3" : "#294d47";
+      ctx.fillRect(x, y, 512, 256);
+      ctx.strokeStyle = i < 4 ? "#4b625b" : "#a9b798";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x + 12, y + 12, 488, 232);
+      ctx.textAlign = "center";
+      ctx.fillStyle = i < 4 ? "#304b46" : "#ece3cc";
+      ctx.font = i < 4 ? "bold 116px serif" : "bold 43px sans-serif";
+      ctx.fillText(lines[0], x + 256, y + 126, 462);
+      ctx.font = "22px sans-serif";
+      ctx.fillText(lines[1], x + 256, y + 182, 460);
+      ctx.font = "18px sans-serif";
+      ctx.fillText(lines[2], x + 256, y + 219, 460);
+    });
+    this.m.detailSign = new this.T.MeshStandardMaterial({
+      map: this.texture(c),
+      roughness: 0.82,
+      color: "#ffffff",
+    });
+  }
+  detailPanel(index, x, y, z, w, h, rotation = 0) {
+    this.add(
+      "sign" + index,
+      "detailSign",
+      x,
+      y,
+      z,
+      w,
+      h,
+      1,
+      "#ffffff",
+      0,
+      rotation,
+      0,
+      "near",
+    );
   }
   makeReflection() {
     const T = this.T,
@@ -597,7 +757,7 @@ window.EvercityExterior = class EvercityExterior {
       const block = (mat, u, v, out, a, h, depth, color, tier = "facade") => {
         const p = at(u, v, out);
         this.box(
-          mat,
+          mat === "masonry" && !residential ? "render" : mat,
           ...p,
           alongX ? a : depth,
           h,
@@ -685,6 +845,80 @@ window.EvercityExterior = class EvercityExterior {
               );
         }
       }
+      // Deep window sills, drip edges and lintels at walking-distance elevations.
+      // South balconies and their door sweeps are deliberately excluded.
+      if (face !== 1) {
+        for (let f = 1; f < Math.min(floors, 5); f++) {
+          const y = B + f * F;
+          for (let u = -length / 2 + 3.8; u < length / 2 - 2; u += 5.4) {
+            block(
+              "render",
+              u,
+              y + 0.98,
+              0.36,
+              3.45,
+              0.14,
+              0.58,
+              "#d4cebb",
+              "near",
+            );
+            block(
+              "dark",
+              u,
+              y + 0.87,
+              0.46,
+              3.22,
+              0.04,
+              0.12,
+              "#ffffff",
+              "near",
+            );
+            block("trim", u, y + 5.0, 0.23, 3.45, 0.1, 0.24, metal, "near");
+          }
+        }
+        // Service grille set in the opaque plinth, with a hood and visible slats.
+        for (const u of [-length * 0.28, length * 0.28]) {
+          block("trim", u, 1.17, 0.56, 1.5, 0.68, 0.16, metal, "near");
+          block("dark", u, 1.17, 0.65, 1.3, 0.51, 0.04, "#ffffff", "near");
+          for (let n = 0; n < 5; n++)
+            block(
+              "trim",
+              u,
+              0.97 + n * 0.1,
+              0.69,
+              1.25,
+              0.035,
+              0.1,
+              "#9aaba1",
+              "near",
+            );
+        }
+      }
+      // Coped parapet and corner stone courses add depth without closing windows.
+      block(
+        "trim",
+        0,
+        roof + 1.12,
+        0.1,
+        length + 0.8,
+        0.08,
+        0.8,
+        metal,
+        "facade",
+      );
+      for (const edge of [-1, 1])
+        for (let n = 0; n < 6; n++)
+          block(
+            "render",
+            edge * (length / 2 - 0.25),
+            0.72 + n * 0.78,
+            0.34,
+            n % 2 ? 0.78 : 1.05,
+            0.65,
+            0.45,
+            "#c7c5b5",
+            "near",
+          );
       block("masonry", 0, roof + 0.95, 0.1, length + 0.65, 0.24, 0.65, tone);
       // Ground-level plinths and wall bays leave the original south entrance untouched.
       if (face !== 1) {
@@ -777,7 +1011,7 @@ window.EvercityExterior = class EvercityExterior {
       if (cafe) {
         for (let n = 0; n < 12; n++)
           this.box(
-            n % 2 ? "timber" : "trim",
+            "fabric",
             x + side * w * 0.29 - 4.4 + n * 0.8,
             4.3,
             z + d / 2 + 1.45,
@@ -789,7 +1023,7 @@ window.EvercityExterior = class EvercityExterior {
             "facade",
           );
         this.box(
-          "timber",
+          "fabric",
           x + side * w * 0.29,
           4.02,
           z + d / 2 + 2.8,
@@ -944,6 +1178,329 @@ window.EvercityExterior = class EvercityExterior {
     }
     this.street(b, signIndex);
     this.neighborhoodObjects(b);
+    this.streetCraft(b);
+    this.frontageProp(b);
+  }
+  streetCraft(b) {
+    const { x, z, w, d, type } = b;
+    const district = Math.abs(Math.round(x / 72) + Math.round(z / 72)) % 4;
+    // Beside the entry, not across the six-meter opening or its canopy sign.
+    this.box(
+      "trim",
+      x + 5.05,
+      2.48,
+      z + d / 2 + 0.15,
+      1.1,
+      0.69,
+      0.17,
+      "#65756b",
+    );
+    this.detailPanel(district, x + 5.05, 2.48, z + d / 2 + 0.245, 1, 0.5);
+    if (["cafe", "shop", "gallery"].includes(type))
+      this.detailPanel(5, x + 7.3, 2.2, z + d / 2 + 0.11, 1.1, 0.55);
+    // Small pipe shoes and wall-mounted meter boxes stay out of the walking lane.
+    this.box(
+      "trim",
+      x - w / 2 - 0.34,
+      2.12,
+      z + 3,
+      0.48,
+      1.04,
+      0.72,
+      "#94a297",
+    );
+    this.box("dark", x - w / 2 - 0.59, 2.25, z + 3, 0.025, 0.25, 0.4);
+    for (const dz of [2.78, 3.22])
+      this.cylinder(
+        "trim",
+        x - w / 2 - 0.38,
+        1.03,
+        z + dz,
+        0.025,
+        1.22,
+        "#65776e",
+      );
+    for (const side of [-1, 1]) {
+      // Segmented curb mortar and a narrow cobbled drainage course.
+      for (let n = -24; n <= 24; n += 2) {
+        this.box(
+          "dark",
+          x + n,
+          0.342,
+          z + side * 27,
+          0.026,
+          0.009,
+          0.25,
+          "#b3b7a5",
+        );
+        this.box(
+          "dark",
+          x + side * 27,
+          0.342,
+          z + n,
+          0.25,
+          0.009,
+          0.026,
+          "#b3b7a5",
+        );
+      }
+      for (let n = -18; n <= 18; n += 1.2) {
+        this.box(
+          "render",
+          x + side * 26.6,
+          0.29,
+          z + n,
+          0.32,
+          0.016,
+          1.12,
+          n % 2 ? "#89988b" : "#b4b7a4",
+        );
+      }
+      // Flush utility patch in the asphalt: no extra collision or traffic obstruction.
+      this.box("dark", x + side * 30, 0.019, z - 7, 1.9, 0.012, 3.5, "#c3c4b7");
+      this.box(
+        "trim",
+        x + side * 30,
+        0.027,
+        z - 7,
+        1.55,
+        0.006,
+        3.12,
+        "#66716b",
+      );
+      for (let n = 0; n < 12; n++) {
+        const xx = x + side * (25.85 + this.random() * 0.5),
+          zz = z + 16 + this.random() * 3;
+        this.add(
+          "sphere",
+          "foliage",
+          xx,
+          0.3,
+          zz,
+          0.065,
+          0.008,
+          0.13,
+          this.pick(["#b1995e", "#a97a4f", "#7f9164"]),
+          0,
+          this.random() * Math.PI,
+        );
+      }
+    }
+    if (type === "cafe") {
+      // Dress the existing terrace tables rather than placing duplicate furniture.
+      for (const side of [-1, 1]) {
+        const tx = x + side * 12,
+          tz = z + d / 2 + 4;
+        this.cylinder("trim", tx - 0.48, 1.393, tz, 0.16, 0.025, "#e1d6bc");
+        this.cylinder("trim", tx - 0.48, 1.49, tz, 0.095, 0.17, "#eee5d0");
+        this.cylinder("dark", tx - 0.48, 1.578, tz, 0.078, 0.006, "#846543");
+        this.box(
+          "render",
+          tx + 0.45,
+          1.398,
+          tz,
+          0.4,
+          0.035,
+          0.28,
+          "#dcc7a8",
+          0.2,
+        );
+      }
+    }
+  }
+  frontageProp(b) {
+    const x = b.x - 7.2,
+      z = b.z + 24.5;
+    // Flush to the 0.28m pavement, inside the furnishing bay and below the prop.
+    this.add(
+      "leaf",
+      "contact",
+      x,
+      0.284,
+      z,
+      3.3,
+      1.7,
+      1,
+      "#ffffff",
+      -Math.PI / 2,
+      0,
+      0,
+      "near",
+    );
+    // This bay is outside the entry axis, NPC lanes, benches and terrace chairs.
+    if (b.type === "residential" || b.type === "hotel") {
+      this.prop("climbing-planter", x, z, 2.6, 1.1, () => {
+        this.box("masonry", x, 0.65, z, 2.6, 0.66, 1.1, "#b48766");
+        this.box("dark", x, 0.989, z, 2.36, 0.016, 0.88, "#998570");
+        for (let n = -2; n <= 2; n++)
+          this.box(
+            "timber",
+            x + n * 0.49,
+            1.96,
+            z - 0.36,
+            0.045,
+            2.2,
+            0.06,
+            "#a99b79",
+          );
+        for (let n = 0; n < 5; n++)
+          this.box(
+            "timber",
+            x,
+            1.18 + n * 0.42,
+            z - 0.36,
+            2.45,
+            0.045,
+            0.06,
+            "#a99b79",
+          );
+        for (let n = 0; n < 24; n++) {
+          const xx = x + Math.sin(n * 2.4) * 0.95,
+            yy = 1.18 + n * 0.075;
+          this.add(
+            "leaf",
+            "leaf",
+            xx,
+            yy,
+            z - 0.28,
+            0.6,
+            0.65,
+            1,
+            n % 3 ? "#719261" : "#a6ae71",
+            0,
+            0.3 * Math.sin(n),
+            n * 0.5,
+          );
+        }
+        for (const dx of [-0.85, 0, 0.85])
+          this.shrub(x + dx, 1.0, z, 0.55, true);
+      });
+    } else if (b.type === "cafe") {
+      this.prop("coffee-cart", x, z, 2.6, 1.2, () => {
+        this.box("timber", x, 1.01, z, 2.5, 1.04, 1.1, "#b89165");
+        for (const dx of [-1, 1])
+          for (const dz of [-0.42, 0.42])
+            this.add("ring", "dark", x + dx, 0.45, z + dz, 0.16, 0.16, 0.16);
+        // Framed wood panels, corner hardware and real contact with the pavement.
+        for (const dx of [-1.2, 1.2]) {
+          this.box(
+            "trim",
+            x + dx,
+            1.03,
+            z + 0.56,
+            0.07,
+            0.99,
+            0.045,
+            "#688172",
+          );
+          for (const yy of [0.61, 1.43])
+            this.cylinder(
+              "trim",
+              x + dx,
+              yy,
+              z + 0.59,
+              0.028,
+              0.055,
+              "#b8bca7",
+            );
+        }
+        for (let n = -3; n <= 3; n++)
+          this.box(
+            "dark",
+            x + n * 0.3,
+            1.0,
+            z + 0.552,
+            0.012,
+            0.83,
+            0.009,
+            "#b2a88c",
+          );
+        this.box("trim", x, 1.57, z, 2.6, 0.12, 1.2, "#d5d0b8");
+        this.box("dark", x - 0.6, 1.641, z + 0.1, 1.04, 0.02, 0.83, "#b6baaa");
+        this.box("trim", x + 0.6, 1.76, z + 0.29, 0.46, 0.24, 0.33, "#617d73");
+        this.box("dark", x + 0.6, 1.892, z + 0.29, 0.38, 0.025, 0.25);
+        for (let n = 0; n < 4; n++)
+          this.cylinder(
+            "trim",
+            x + 1.02,
+            1.7 + n * 0.045,
+            z + 0.22,
+            0.09 + n * 0.005,
+            0.06,
+            "#e5d8bd",
+          );
+        this.box("trim", x - 0.6, 1.93, z, 0.9, 0.61, 0.64, "#839c8e");
+        this.box("dark", x - 0.6, 1.89, z + 0.33, 0.72, 0.32, 0.03);
+        for (const dx of [-0.81, -0.4]) {
+          this.cylinder("trim", x + dx, 1.73, z + 0.42, 0.075, 0.17, "#e4dbbf");
+          this.box("trim", x + dx, 1.98, z + 0.4, 0.045, 0.16, 0.16, "#cbd0c0");
+        }
+        for (let n = 0; n < 3; n++)
+          this.cylinder(
+            "trim",
+            x + 0.26 + n * 0.28,
+            1.87,
+            z - 0.16,
+            0.1,
+            0.47,
+            "#c6aa7d",
+          );
+        this.detailPanel(4, x + 0.66, 1.12, z + 0.565, 1.02, 0.51);
+      });
+    } else if (b.type === "gallery") {
+      this.prop("sculpture-plinth", x, z, 2.4, 1.4, () => {
+        this.box("render", x, 0.85, z, 2.4, 1.05, 1.4, "#d3ccba");
+        this.add(
+          "ring",
+          "trim",
+          x,
+          2.36,
+          z,
+          0.84,
+          0.84,
+          0.84,
+          "#b2915d",
+          0.2,
+          0.4,
+        );
+        this.add(
+          "ring",
+          "trim",
+          x,
+          2.36,
+          z,
+          0.64,
+          0.64,
+          0.64,
+          "#66897f",
+          0.4,
+          1.4,
+        );
+        this.box("trim", x, 1.46, z, 0.32, 0.21, 0.3, "#b2915d");
+        this.detailPanel(6, x, 0.95, z + 0.71, 1.25, 0.625);
+      });
+    } else {
+      this.prop("parcel-locker", x, z, 2.6, 0.85, () => {
+        this.box("trim", x, 1.44, z, 2.6, 2.24, 0.85, "#617f76");
+        for (let row = 0; row < 3; row++)
+          for (let col = 0; col < 4; col++) {
+            const xx = x - 0.96 + col * 0.64,
+              yy = 0.73 + row * 0.7;
+            this.box(
+              "trim",
+              xx,
+              yy,
+              z + 0.439,
+              0.59,
+              0.64,
+              0.025,
+              (row + col) % 3 ? "#90a08d" : "#bead88",
+            );
+            this.box("dark", xx + 0.18, yy, z + 0.46, 0.045, 0.15, 0.018);
+          }
+        this.box("trim", x, 2.62, z, 2.6, 0.12, 0.85, "#b9c3ad");
+      });
+    }
   }
   bicycle(x, z, color) {
     // Bicycle lies parallel to sidewalk: both wheels share the same vertical plane.
@@ -1279,6 +1836,43 @@ window.EvercityExterior = class EvercityExterior {
     this.panel(5, x + 8, 1.5, z + 24, 3, 1.5);
     this.box("trim", x + 8, 0.85, z + 23.96, 0.12, 1.2, 0.12, "#526259");
     this.parkObjects(p);
+    // A low herb bed on the lawn, separate from axial paths and existing play areas.
+    this.prop("herb-garden", x + 10, z + 22, 4.2, 2, () => {
+      this.box("timber", x + 10, 0.88, z + 22, 4.2, 0.46, 2, "#9c8660");
+      this.box("dark", x + 10, 1.12, z + 22, 3.96, 0.025, 1.76, "#9e8a73");
+      for (let n = 0; n < 5; n++) {
+        this.shrub(x + 8.4 + n * 0.8, 1.13, z + 22, 0.55, n % 2 === 0);
+        this.box(
+          "timber",
+          x + 8.4 + n * 0.8,
+          1.28,
+          z + 22.72,
+          0.04,
+          0.35,
+          0.035,
+          "#cfbd92",
+        );
+      }
+      this.detailPanel(7, x + 10, 1.46, z + 22.76, 1.2, 0.6);
+    });
+    for (const side of [-1, 1])
+      for (let n = 0; n < 18; n++) {
+        const xx = x + side * (7 + this.random() * 18),
+          zz = z + 24.8;
+        this.add(
+          "leaf",
+          "leaf",
+          xx,
+          0.91,
+          zz,
+          0.3,
+          0.6,
+          1,
+          "#b5bd87",
+          0,
+          n * 2.4,
+        );
+      }
   }
   // Count complete props separately from the primitive parts used to model them.
   // All new freestanding props have one conservative, stable collision envelope.
@@ -1417,7 +2011,7 @@ window.EvercityExterior = class EvercityExterior {
         this.box("trim", x + dx, 2, z - 0.58, 0.07, 3.4, 0.07, "#5d7361");
       for (let n = 0; n < 12; n++)
         this.box(
-          "timber",
+          "fabric",
           x - 2.2 + n * 0.4,
           3.67,
           z,
@@ -1881,7 +2475,8 @@ window.EvercityExterior = class EvercityExterior {
               : 100) **
             2 &&
         m.material !== this.m.glass &&
-        m.material !== this.m.glow;
+        m.material !== this.m.glow &&
+        m.material !== this.m.contact;
       if (m.castShadow !== casts) {
         m.castShadow = casts;
         this.renderer.shadowMap.needsUpdate = true;
@@ -1928,6 +2523,28 @@ window.EvercityExterior = class EvercityExterior {
         Number.isFinite(m.boundingSphere.radius),
       ),
       worldScalePaving: !!this.materials.paving.map,
+      surfaceRoughness: [
+        this.m.masonry,
+        this.m.render,
+        this.m.trim,
+        this.materials.grass,
+      ].every(
+        (m) =>
+          m.map &&
+          m.bumpMap &&
+          m.roughnessMap &&
+          m.roughnessMap.colorSpace === this.T.NoColorSpace,
+      ),
+      sharedDetailAtlas: !!this.m.detailSign.map,
+      lightweightContactShade:
+        this.m.contact.map.image.width === 64 && !this.m.contact.depthWrite,
+      neighborhoodIdentity: [
+        "climbing-planter",
+        "coffee-cart",
+        "sculpture-plinth",
+        "parcel-locker",
+        "herb-garden",
+      ].every((kind) => this.objects[kind] > 0),
       leafCutouts: this.m.leaf.alphaTest > 0,
       environmentReflection: !!this.scene.environment,
       allTiersPresent: ["near", "green", "roof", "facade"].every(
