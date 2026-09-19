@@ -369,5 +369,115 @@ window.EvercityResidences = class EvercityResidences {
     for(const u of [.3,1.6])B('stainless',u,2.35,7,.04,1.3,.07);
     for(let n=0;n<5;n++)B('stainless',.95,1.8+n*.25,7,1.3,.04,.07);
     B('linen',.95,2.18,6.9,.75,.63,.05);cyl('dark',X(4.73),y+1.696,Z(4.6),.055,.018);
+    this.householdObjects({b,f,y,X,Z,B,width,depth,split,entry,livingU,livingV,bedU,bedV,kitchenV,wood,accent,variant});
+  }
+  householdObjects({b,f,y,X,Z,B,width,depth,split,entry,livingU,livingV,bedU,bedV,kitchenV,wood,accent,variant}){
+    const {cyl,ball}=this.a,objects={};let components=0;
+    // Surface-only still lifes never change the door sweep or room navigation graph.
+    const box=(...args)=>{components++;return B(...args);};
+    const C=(m,u,h,v,r,t)=>{components++;return cyl(m,X(u),y+h,Z(v),r,t);};
+    const O=(m,u,h,v,rx,ry,rz)=>{components++;return ball(m,X(u),y+h,Z(v),rx,ry,rz);};
+    const item=(name,build)=>{objects[name]=(objects[name]||0)+1;build();};
+    item('entry-organizer',()=>{
+      box(wood,.7,1.4,entry+2.8,.6,.09,.42);
+      for(const du of [-.25,.25])box('gold',.7+du,1.47,entry+2.8,.025,.09,.4);
+      box('paper',.68,1.46,entry+2.8,.35,.02,.24);
+      box('navy',.77,1.49,entry+2.81,.25,.025,.13);
+      box('gold',.55,1.49,entry+2.86,.13,.02,.03);
+    });
+    item('reed-diffuser',()=>{
+      C('terracotta',1.8,1.53,entry+2.8,.1,.28);
+      for(let n=0;n<5;n++)box('woodLight',1.72+n*.036,1.85,entry+2.8,.015,.43,.015);
+    });
+    item('tea-tray',()=>{
+      box(wood,livingU+.45,.795,livingV-1.8,1.05,.035,.56);
+      C('paper',livingU+.33,.96,livingV-1.87,.15,.28);
+      C('gold',livingU+.33,1.12,livingV-1.87,.16,.035);
+      box('paper',livingU+.52,1.02,livingV-1.87,.18,.055,.065);
+      O('paper',livingU+.15,1,livingV-1.87,.09,.1,.025);
+      for(const du of [.02,.78]){C('gold',livingU+du,.83,livingV-1.65,.12,.015);C('paper',livingU+du,.9,livingV-1.65,.07,.13);}
+    });
+    item('open-magazine',()=>{
+      box('paper',livingU-.8,.85,livingV-1.45,.62,.025,.43);
+      box('residenceArt'+variant,livingU-.95,.869,livingV-1.45,.25,.01,.36);
+      for(let n=0;n<5;n++)box('teal',livingU-.65,.87,livingV-1.6+n*.065,.22,.009,.015);
+    });
+    for(const du of [-2.05,2.05])item('bookshelf-speaker',()=>{
+      box('black',livingU+du,1.45,livingV-4.65,.48,.5,.42);
+      for(const h of [1.34,1.56])O('metal',livingU+du,h,livingV-4.425,.12,.12,.022);
+    });
+    item('game-console',()=>{
+      box('paper',livingU+1.15,1.25,livingV-4.45,.75,.07,.3);
+      box('dark',livingU+1.15,1.29,livingV-4.45,.56,.012,.27);
+      for(let n=0;n<6;n++)box('metal',livingU+.94+n*.08,1.303,livingV-4.45,.025,.008,.23);
+    });
+    item('breakfast-board',()=>{
+      box(wood,5.2,1.31,split+3.36,1.1,.04,.53);
+      for(let n=0;n<3;n++)O('gold',4.93+n*.27,1.43,split+3.36,.13,.095,.19);
+      C('terracotta',5.6,1.48,split+3.37,.09,.28);C('paper',5.6,1.63,split+3.37,.1,.04);
+    });
+    item('kitchen-drying-rack',()=>{
+      // Wall shelf above the backsplash, clear of sink, hob and opening fridge front.
+      box('stainless',width-3.5,2.43,kitchenV-.37,1.65,.05,.36);
+      for(let n=0;n<7;n++)box('stainless',width-4.2+n*.21,2.51,kitchenV-.37,.018,.16,.33);
+      for(let n=0;n<4;n++)O('paper',width-4.1+n*.21,2.65,kitchenV-.35,.025,.2,.16);
+    });
+    item('recipe-book',()=>{
+      box(wood,width-3.25,1.75,kitchenV+.31,.44,.19,.06);
+      box('paper',width-3.25,1.89,kitchenV+.33,.39,.35,.045);
+      for(let n=0;n<4;n++)box('teal',width-3.25,1.79+n*.065,kitchenV+.36,.27,.012,.01);
+    });
+    item('bedside-phone',()=>{
+      box('black',bedU+2.375,1.255,bedV-1.48,.22,.035,.37);
+      box('screen',bedU+2.375,1.278,bedV-1.48,.18,.013,.28);
+      box('paper',bedU+2.375,1.29,bedV-1.4,.07,.008,.015);
+    });
+    item('alarm-clock',()=>{
+      box('walnut',bedU-2.375,1.47,bedV-1.96,.46,.37,.15);
+      box('dark',bedU-2.375,1.49,bedV-1.875,.38,.22,.025);
+      for(let n=0;n<4;n++)box('paper',bedU-2.5+n*.08,1.49,bedV-1.855,.045,.1,.012);
+    });
+    item('desk-accessories',()=>{
+      box('linen',2.4,1.323,split-2.3,1.9,.013,.94);
+      O('black',3.04,1.38,split-2.04,.09,.055,.13);
+      box('navy',1.77,1.39,split-2.29,.3,.025,.43);
+      C('metal',3.51,1.48,split-2.59,.1,.3);
+      box('paper',3.51,1.65,split-2.59,.23,.04,.18);
+    });
+    item('pin-board',()=>{
+      // Mounted on the bedroom partition, rather than freestanding in the doorway.
+      box(wood,1.12,2.68,split-.11,1.45,1.25,.06);
+      box('linen',1.12,2.68,split-.15,1.32,1.12,.025);
+      for(let n=0;n<3;n++){
+        box(['paper','sage','terracotta'][n],.7+n*.41,2.7,split-.175,.32,.65,.014);
+        O('gold',.7+n*.41,2.96,split-.19,.027,.027,.01);
+      }
+    });
+    item('tissue-box',()=>{
+      box('linen',width-.65,3.3,depth-3.24,.55,.32,.36);
+      box('dark',width-.65,3.468,depth-3.24,.33,.013,.06);
+      box('paper',width-.65,3.53,depth-3.24,.21,.14,.023);
+    });
+    item('toothbrush-set',()=>{
+      C('paper',5.24,1.58,4.79,.1,.28);
+      for(const du of [-.045,.045]){box(du<0?'teal':'terracotta',5.24+du,1.82,4.79,.035,.4,.035);box('paper',5.24+du,2.03,4.79,.045,.095,.055);}
+    });
+    item('soap-dish',()=>{
+      box('marble',4.18,1.46,4.8,.31,.04,.24);
+      O('sage',4.18,1.51,4.8,.12,.035,.08);
+    });
+    item('laundry-shelf',()=>{
+      box(wood,4.68,2.53,.34,1.45,.09,.5);
+      for(let n=0;n<4;n++)box(n%2?'linen':'paper',4.34,2.63+n*.1,.36,.56,.085,.37);
+      for(let n=0;n<2;n++){C(n?'terracotta':'sage',4.87+n*.26,2.83,.34,.09,.49);C('paper',4.87+n*.26,3.1,.34,.065,.05);}
+    });
+    // Different hobbies per palette, keeping the same safe shelf footprint.
+    item(['seed-library','camera-collection','model-making'][variant],()=>{
+      const u=width-.65,v=depth-3.24,h=2.46;
+      if(variant===0){for(let n=0;n<4;n++){box(['sage','paper','terracotta'][n%3],u,h+.2,v-.4+n*.25,.5,.36,.1);box('gold',u,h+.25,v-.34+n*.25,.2,.12,.014);}}
+      else if(variant===1){box('black',u,h+.16,v,.55,.29,.35);O('metal',u,h+.17,v+.24,.16,.16,.12);box('stainless',u-.12,h+.34,v,.18,.06,.13);}
+      else {box(wood,u,h+.01,v,.7,.035,.75);for(let n=0;n<5;n++)box(n%2?'paper':'sage',u+(n%2)*.17-.08,h+.13+n*.03,v-.23+n*.12,.19,.2+n*.06,.15);}
+    });
+    b.units[f][b.units[f].length-1].objects={categories:objects,count:Object.values(objects).reduce((a,b)=>a+b,0),components};
   }
 };

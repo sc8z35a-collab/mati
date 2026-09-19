@@ -168,7 +168,92 @@
       bookcase(x-w*.3,y,z-d/2+1,w*.24);bookcase(x+w*.3,y,z-d/2+1,w*.24);
       if(floor===0){furnitureSolid(x+7,z+d/2-6,6,1.6);box('wood',x+7,y+.66,z+d/2-6,6,1.3,1.6);box('light',x+7,y+1.38,z+d/2-6,6.2,.15,1.8);box('black',x+7,y+1.8,z+d/2-6,.9,.6,.07);}
     }
+    if(!detailedFloor)commercialObjects(b,floor,theme);
     furnishingBuilding=null;
+  }
+  function commercialObjects(b,f,theme){
+    const {x,z,w,d}=b,y=BASE+f*FLOOR,objects={};let components=0;
+    const B=(m,xx,h,zz,a,t,c)=>{components++;return box(m,xx,y+h,zz,a,t,c);};
+    const C=(m,xx,h,zz,r,t)=>{components++;return cyl(m,xx,y+h,zz,r,t);};
+    const O=(m,xx,h,zz,a,t,c)=>{components++;return ball(m,xx,y+h,zz,a,t,c);};
+    const item=(name,build)=>{objects[name]=(objects[name]||0)+1;build();};
+    // Everything rests on an existing counter, desk, bed or display plinth.
+    // Reuse shared materials and primitive geometry; active floors are batched/unloaded.
+    const cup=(xx,h,zz)=>{C('paper',xx,h+.12,zz,.11,.24);C('dark',xx,h+.245,zz,.086,.012);O('paper',xx+.12,h+.12,zz,.08,.08,.024);};
+    const book=(xx,h,zz,m)=>{B(m,xx,h+.035,zz,.7,.07,.48);B('paper',xx,h+.036,zz+.247,.61,.043,.014);};
+    const pastries=(xx,h,zz)=>{
+      B('woodLight',xx,h+.02,zz,1.6,.04,.7);
+      for(let n=0;n<6;n++){O('gold',xx+(n%3-1)*.46,h+.15,zz+(Math.floor(n/3)-.5)*.3,.18,.11,.12);B('paper',xx+(n%3-1)*.46,h+.25,zz+(Math.floor(n/3)-.5)*.3,.1,.012,.025);}
+    };
+    if(theme==='cafe'||theme==='shop'){
+      const cx=x-w*.29,cz=z-d*.24;
+      item(theme==='cafe'?'bakery-case':'checkout-display',()=>{
+        B('wood',cx+2.9,1.53,cz,2.05,.08,1.25);
+        pastries(cx+2.9,1.58,cz);
+        for(const dx of [-.97,.97])B('metal',cx+2.9+dx,1.96,cz,.035,.84,1.18);
+        B('lobbyGlass',cx+2.9,1.99,cz+.62,1.9,.72,.035);
+        B('lobbyGlass',cx+2.9,2.39,cz,2.05,.04,1.25);
+        B('paper',cx+2.9,1.69,cz+.66,.65,.2,.025);
+      });
+      for(const side of [-1,1])for(let zz=-4;zz<d/2-4;zz+=6){
+        const tx=x+side*w*.29,tz=z+zz;
+        item(theme==='cafe'?'cafe-table-service':'market-gift-display',()=>{
+          if(theme==='cafe'){
+            cup(tx-.7,1.07,tz+.2);C('paper',tx+.65,1.085,tz-.25,.27,.025);O('gold',tx+.65,1.19,tz-.25,.18,.09,.14);
+            B('wood',tx,1.28,tz-.49,.35,.42,.055);B('paper',tx,1.3,tz-.453,.28,.29,.014);
+          }else{
+            for(let n=0;n<3;n++){
+              B(['sage','terracotta','linen'][n],tx-.8+n*.8,1.33,tz,.53,.54,.65);
+              B('gold',tx-.8+n*.8,1.611,tz,.065,.014,.65);
+              B('paper',tx-.8+n*.8,1.38,tz+.336,.25,.23,.017);
+            }
+          }
+        });
+      }
+    }else if(theme==='gallery'){
+      for(const side of [-1,1])for(let zz=-d/2+9;zz<d/2-5;zz+=7){
+        const tx=x+side*w*.33;
+        item('gallery-caption',()=>{
+          B('gold',tx,.93,z+zz+1.025,1.4,.44,.025);B('paper',tx,.93,z+zz+1.045,1.3,.36,.014);
+          for(let n=0;n<4;n++)B('dark',tx,.83+n*.065,z+zz+1.058,1.02-n*.15,.015,.009);
+        });
+      }
+    }else if(theme==='hotel'){
+      for(const side of [-1,1])for(let zz=-d/2+10;zz<d/2-5;zz+=11){
+        const tx=x+side*w*.3;
+        item('hotel-welcome-tray',()=>{
+          B('woodLight',tx,1.13,z+zz+1,1.8,.08,1.1);
+          for(const dx of [-.86,.86])B('gold',tx+dx,1.25,z+zz+1,.035,.17,.9);
+          cup(tx-.4,1.18,z+zz+1);B('paper',tx+.4,1.22,z+zz+1,.5,.04,.6);
+          for(let n=0;n<3;n++)B('gold',tx+.4,1.246,z+zz+.83+n*.12,.3,.012,.018);
+        });
+        item('folded-hotel-towels',()=>{for(let n=0;n<3;n++)B('linen',tx+1,1.2+n*.13,z+zz-.35,1.25-n*.17,.12,.66);});
+      }
+    }else if(theme==='lounge'||theme==='residential'){
+      for(const side of [-1,1]){
+        const tx=x+side*w*(theme==='residential'?.29:.3);
+        const tables=theme==='residential'?[z+3.5]:[];
+        if(theme==='lounge')for(let zz=-d/2+10;zz<d/2-4;zz+=9)tables.push(z+zz-2.2);
+        for(const tz of tables)item('lounge-reading-set',()=>{
+          book(tx-.7,1.07,tz,'terracotta');book(tx-.65,1.15,tz,'teal');cup(tx+.65,1.07,tz+.13);
+          C('gold',tx+.1,1.26,tz-.28,.09,.35);C('paper',tx+.1,1.44,tz-.28,.07,.015);
+        });
+      }
+    }else{
+      for(const side of [-1,1])for(let zz=-d/2+10;zz<d/2-4;zz+=5.8)for(let n=0;n<2;n++){
+        const tx=x+side*(5.7+n*4.6),tz=z+zz;
+        item('office-desk-set',()=>{
+          O('black',tx+.49,1.14,tz+.26,.07,.045,.1);cup(tx-.87,1.07,tz+.26);
+          B('black',tx-.78,1.14,tz-.27,.38,.11,.33);
+          B('screen',tx-.78,1.21,tz-.31,.27,.035,.13);
+          for(let k=0;k<3;k++)B('paper',tx-.88+k*.1,1.207,tz-.15,.055,.013,.05);
+          C('teal',tx+.84,1.26,tz-.32,.1,.36);
+          for(let k=0;k<3;k++)B(k%2?'gold':'navy',tx+.79+k*.05,1.52,tz-.32,.022,.38,.022);
+          for(let k=0;k<4;k++)B('teal',tx+.83,1.133,tz+.02+k*.065,.24,.011,.016);
+        });
+      }
+    }
+    b.objectDetails=b.objectDetails||{};b.objectDetails[f]={categories:objects,count:Object.values(objects).reduce((a,b)=>a+b,0),components};
   }
   // Low-cost silhouettes make glazed upper floors feel inhabited from the street.
   // They share instanced primitive batches and are replaced, not layered, on entry.
@@ -696,15 +781,34 @@
       currentFloorOnly:!indoor||surfaces.every(mesh=>Math.abs(mesh.position.y-(BASE+player.floor*FLOOR))<.2)
     };
   }
+  function objectSnapshot(){
+    const current=player.building||currentBuilding;
+    return {exterior:exterior?.snapshot(),ground:buildings.reduce((n,b)=>n+(b.objectDetails?.[0]?.count||0),0),
+      interior:current?(current.units?.[player.floor]?.map(u=>u.objects)||[current.objectDetails?.[player.floor]].filter(Boolean)):[]};
+  }
+  function objectSelfTest(){
+    const props=exterior?.placements||[];
+    const clear=(x,z)=>!props.some(p=>Math.abs(x-p.x)<p.w/2+.32&&Math.abs(z-p.z)<p.d/2+.32);
+    return {
+      allEntrancesClear:buildings.every(b=>{for(let dz=b.d/2;dz<=29;dz+=.25)for(const dx of [-2,0,2])if(!clear(b.x+dx,b.z+dz))return false;return true;}),
+      pedestrianLanesClear:[...buildings,...parks].every(b=>{for(let n=-29;n<=29;n++)for(const side of [-1,1])if(!clear(b.x+n,b.z+side*29)||!clear(b.x+side*29,b.z+n))return false;return true;}),
+      parkPathsClear:parks.every(p=>{for(let n=-26;n<=26;n++)if(!clear(p.x,p.z+n)||!clear(p.x+n,p.z))return false;return true;}),
+      allGroundFloorsEnriched:buildings.every(b=>b.objectDetails?.[0]?.count>0),
+      rooftopPropsSolid:buildings.every(b=>b.solids[b.floors]?.some(s=>s.x===b.x+8&&s.z===b.z+12)),
+      newStreetPropsSolid:props.every(p=>blocked(p.x,p.z,false,0,null))
+    };
+  }
   // A read-only diagnostics hook enables reproducible in-browser validation.
-  window.evercity={release:'20260919.2',visualSelfTest,floorTest:validateFloorSurfaces,residenceSnapshot:()=>({room:residenceContext()?.room||null,unit:residenceContext()?.unit?.roomNumber||null,items:interactions.snapshot()}),getState:()=>({capturing:captureBusy,buildings:buildings.length,parks:parks.length,landmarks:landmarks.length,position:{x:player.x,y:player.y,z:player.z},floor:player.floor,inside:currentBuilding?.name||null,explored:discovered.size,frames:frameCount,residentialBuildings:buildings.filter(b=>b.type==='residential').length,apartmentCount:buildings.filter(b=>b.type==='residential').reduce((n,b)=>n+(b.floors-1)*2,0),traffic:trafficSystem?.snapshot(),lighting:lightingSystem?.snapshot(),hdr:hdr.snapshot(),story:stories?.data.active,storyProgress:stories?.data.progress,weather:environment?.weather,exterior:exterior?.snapshot(),render:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,pixelRatio:renderer.getPixelRatio()}}),exteriorTest:()=>exterior?.selfTest(),selfTest:()=>{
+  window.evercity={release:'20260919.3',objectSnapshot,objectTest:objectSelfTest,visualSelfTest,floorTest:validateFloorSurfaces,residenceSnapshot:()=>({room:residenceContext()?.room||null,unit:residenceContext()?.unit?.roomNumber||null,items:interactions.snapshot()}),getState:()=>({capturing:captureBusy,buildings:buildings.length,parks:parks.length,landmarks:landmarks.length,position:{x:player.x,y:player.y,z:player.z},floor:player.floor,inside:currentBuilding?.name||null,explored:discovered.size,frames:frameCount,residentialBuildings:buildings.filter(b=>b.type==='residential').length,apartmentCount:buildings.filter(b=>b.type==='residential').reduce((n,b)=>n+(b.floors-1)*2,0),traffic:trafficSystem?.snapshot(),lighting:lightingSystem?.snapshot(),hdr:hdr.snapshot(),story:stories?.data.active,storyProgress:stories?.data.progress,weather:environment?.weather,exterior:exterior?.snapshot(),render:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,pixelRatio:renderer.getPixelRatio()}}),exteriorTest:()=>exterior?.selfTest(),selfTest:()=>{
     const b=buildings.find(v=>v.name==='ATLAS TOWER');const old={...player};player.floor=0;
     const tests={buildingCount:buildings.length===76,allBuildingsHaveFloors:buildings.every(v=>v.floors>=4),atlasHas25Floors:b.floors===25,entrancePassable:!blocked(b.x,b.z+b.d/2),sideWallSolid:blocked(b.x+b.w/2,b.z),backWallSolid:blocked(b.x,b.z-b.d/2),elevatorCoreSolid:blocked(b.x,b.z-b.d/2+3),mapDestinations:landmarks.length===9,groundInteriors:scene.children.some(c=>c.isInstancedMesh)};
     player.floor=1;player.building=b;tests.upperFloorBoundary=blocked(b.x+b.w/2+1,b.z);tests.upperFloorAisle=!blocked(b.x,b.z);Object.assign(player,old);return tests;
   }};
   // Explicit opt-in inspection controls for regression tests, never used by gameplay.
   if(new URLSearchParams(location.search).get('test')==='1')window.evercity.debug={
-    buildings:()=>buildings.map(({id,name,type,w,d,floors})=>({id,name,type,w,d,floors})),
+    buildings:()=>buildings.map(({id,name,type,x,z,w,d,floors})=>({id,name,type,x,z,w,d,floors})),
+    props:()=>exterior.placements.map(p=>({...p})),
+    blocked:(x,z)=>blocked(x,z,false),
     load:(id,f)=>{const b=buildings.find(b=>b.id===id);if(!b||!Number.isInteger(f)||f<0||f>b.floors)throw new Error('Invalid test floor');loadFloor(b,f);},
     paths:()=>validateApartmentPaths(player.building,player.floor),
     interactions:()=>interactions.selfTest(),
@@ -721,7 +825,7 @@
       exterior=new EvercityExterior({THREE:T,scene,renderer,materials,obstacle,sun});
       createCity();buildings.forEach(b=>exterior.building(b));parks.forEach(p=>exterior.park(p));exterior.waterfront();exterior.flush();
       const qualitySelect=$('quality-select');qualitySelect.value=exterior.quality;
-      const updateDetailStatus=()=>{$('detail-status').textContent=exterior.snapshot().components.toLocaleString('ja-JP')+'点の外観パーツ / '+(hdr.enabled?(exterior.quality==='hdr-ultra'?'HDR ULTRA · 16-bit HDR / 64-sample AO / Bloom':'HDR SUPER LIGHT · 16-bit HDR / 接地AO / Bloom'):'ACES / 軽量描画'+(!hdr.supported?'（HDR非対応GPU）':''))+' / '+(lightingSystem?.snapshot().filter||'PCF')+' '+sun.shadow.mapSize.x+'px';};
+      const updateDetailStatus=()=>{$('detail-status').textContent=exterior.snapshot().objectCount.toLocaleString('ja-JP')+'個・'+Object.keys(exterior.objects).length+'種類の新規屋外オブジェクト / '+exterior.snapshot().components.toLocaleString('ja-JP')+'点の外観パーツ / '+(hdr.enabled?(exterior.quality==='hdr-ultra'?'HDR ULTRA · 16-bit HDR / 64-sample AO / Bloom':'HDR SUPER LIGHT · 16-bit HDR / 接地AO / Bloom'):'ACES / 軽量描画'+(!hdr.supported?'（HDR非対応GPU）':''))+' / '+(lightingSystem?.snapshot().filter||'PCF')+' '+sun.shadow.mapSize.x+'px';};
       qualitySelect.onchange=e=>{exterior.setQuality(e.target.value);lightingSystem.setQuality(exterior.quality);hdr.setQuality(exterior.quality);exterior.update(1,player,timeMode);updateDetailStatus();};
       flushBatches();traffic();trafficSystem=new EvercityTraffic({THREE:T,scene,vehicles,people,player,staticBlocked:(x,z)=>blocked(x,z,false,0,null)});lightingSystem=new EvercityLighting({THREE:T,scene,renderer,player,streetFixtures,vehicles,people,ambient,sun,buildings,batchMeshes});lightingSystem.setQuality(exterior.quality);hdr.setQuality(exterior.quality);updateDetailStatus();setupLandmarks();updateDiscovery();updateLocation();setTime('golden');
       environment=new EvercityEnvironment({THREE:T,scene,renderer,player,materials,sun,ambient,skyUniforms,getTime:()=>timeMode,setTime,toast});
