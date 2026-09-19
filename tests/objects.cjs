@@ -64,8 +64,25 @@ const allTrue = (name, result) => {
     }
     allTrue("traffic", await page.evaluate(() => EvercityTraffic.selfTest()));
     const initial = await page.evaluate(() => evercity.objectSnapshot());
-    assert.equal(initial.exterior.objectCount, 567);
-    assert.equal(Object.keys(initial.exterior.objects).length, 16);
+    assert.equal(initial.exterior.objectCount, 648);
+    assert.equal(Object.keys(initial.exterior.objects).length, 21);
+    const exteriorBuildings = await page.evaluate(() =>
+      evercity.debug.buildings(),
+    );
+    const typeCount = (...types) =>
+      exteriorBuildings.filter((b) => types.includes(b.type)).length;
+    for (const [kind, count] of Object.entries({
+      "climbing-planter": typeCount("residential", "hotel"),
+      "coffee-cart": typeCount("cafe"),
+      "sculpture-plinth": typeCount("gallery"),
+      "parcel-locker": typeCount("office", "shop"),
+      "herb-garden": 5,
+    }))
+      assert.equal(initial.exterior.objects[kind], count, kind);
+    assert.equal(
+      initial.exterior.propColliders,
+      initial.exterior.objectCount - exteriorBuildings.length,
+    );
     assert(initial.ground > 400);
     console.log(
       "PASS city diagnostics / object counts",
@@ -171,7 +188,36 @@ const allTrue = (name, result) => {
     );
 
     // Render actual game frames for visual checks, with simulation RAF under test control.
+    const cafe = buildings.find((b) => b.name === "COMMON GROUNDS");
+    const gallery = buildings.find((b) => b.name === "MUSEUM OF FORM");
     const shots = [
+      {
+        id: cafe.id,
+        f: 0,
+        x: cafe.x - 7.2,
+        z: cafe.z + 28,
+        yaw: 0,
+        pitch: -0.1,
+        name: "exterior-coffee-cart",
+      },
+      {
+        id: gallery.id,
+        f: 0,
+        x: gallery.x - 7.2,
+        z: gallery.z + 29,
+        yaw: 0,
+        pitch: 0.04,
+        name: "exterior-sculpture",
+      },
+      {
+        id: maple.id,
+        f: 0,
+        x: maple.x - 7.2,
+        z: maple.z + 28,
+        yaw: 0,
+        pitch: 0,
+        name: "exterior-climbing-planter",
+      },
       {
         id: maple.id,
         f: 3,

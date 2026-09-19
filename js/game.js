@@ -3259,7 +3259,7 @@
   }
   // A read-only diagnostics hook enables reproducible in-browser validation.
   window.evercity = {
-    release: "20260919.4",
+    release: "20260919.5",
     objectSnapshot,
     objectTest: objectSelfTest,
     visualSelfTest,
