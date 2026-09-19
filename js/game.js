@@ -446,7 +446,7 @@
   try{const saved=JSON.parse(localStorage.getItem('evercity-controls-v1')||'null');if(saved&&typeof saved==='object'){if(Number.isFinite(saved.sensitivity))sensitivity=T.MathUtils.clamp(saved.sensitivity,.5,2);if(Number.isFinite(saved.fov))camera.fov=T.MathUtils.clamp(saved.fov,55,95);if(typeof saved.comfortMode==='boolean')comfortMode=saved.comfortMode;}}catch(e){}
   camera.updateProjectionMatrix();$('sensitivity').value=sensitivity;$('fov').value=camera.fov;$('comfort-mode').checked=comfortMode;
   $('comfort-mode').onchange=e=>{comfortMode=e.target.checked;saveControls();};
-  function dialogOpen(){return !!document.querySelector('dialog[open]');}
+  function dialogOpen(){return captureBusy||!!document.querySelector('dialog[open]');}
   function startGame(lock=false){started=true;$('enter-button').classList.add('hidden');if(lock&&!isTouch&&document.pointerLockElement!==$('world')){try{const promise=$('world').requestPointerLock();if(promise&&promise.catch)promise.catch(()=>{});}catch(e){}}}
   $('enter-button').onclick=()=>{startGame(!isTouch);toast(isTouch?'左スティックで移動 / 右側をスワイプで見回す':'WASDで移動 / Escでマウスを解放 / 建物の南側から入れます');};
   addEventListener('keydown',e=>{
@@ -495,7 +495,7 @@
   function openDialog(id){keys.clear();resetJoystick();pointer.drag=false;if(document.pointerLockElement)document.exitPointerLock();document.querySelectorAll('dialog[open]').forEach(d=>{if(d.id!==id)d.close();});if(!$(id).open)$(id).showModal();}
   function closeDialogs(){document.querySelectorAll('dialog[open]').forEach(d=>d.close());}
   document.querySelectorAll('.close-dialog').forEach(btn=>btn.onclick=()=>btn.closest('dialog').close());
-  document.querySelectorAll('dialog').forEach(d=>d.addEventListener('click',e=>{if(e.target===d){const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)d.close();}}));
+  document.querySelectorAll('dialog').forEach(d=>d.addEventListener('click',e=>{if(d.id==='capture-dialog')return;if(e.target===d){const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)d.close();}}));
   $('menu-button').onclick=()=>{
     document.querySelector('[data-menu-action="residence-panel"]').disabled=!residenceContext();
     document.querySelector('[data-menu-action="resume-button"]').disabled=$('resume-button').classList.contains('hidden');
@@ -595,9 +595,39 @@
       if(e.target.checked)await audioCtx.resume();else await audioCtx.suspend();
     }catch(err){e.target.checked=false;toast('このブラウザでは環境音を再生できません');}
   };
+  let captureBusy=false;
+  async function capturePhoto(ultra,options){
+    if(captureBusy)throw Error('撮影処理中です。');
+    captureBusy=true;keys.clear();resetJoystick();pointer.drag=false;
+    if(document.pointerLockElement)document.exitPointerLock();
+    const quality=exterior.quality;
+    const markers=[stories.beacon,...stories.npcs.map(n=>n.pin)].map(mesh=>({mesh,visible:mesh.visible}));
+    markers.forEach(({mesh})=>{mesh.visible=false;});
+    try{
+      if(ultra){
+        // Photo quality is temporary and never overwrites the player's saved setting.
+        exterior.setQuality('hdr-ultra',{persist:false});lightingSystem.setQuality('hdr-ultra');hdr.setQuality('hdr-ultra');
+      }
+      exterior.update(1,player,timeMode);lightingSystem.update(1,currentBuilding,timeMode,environment.weather);
+      sun.shadow.needsUpdate=true;renderer.shadowMap.needsUpdate=true;
+      if(ultra)return await hdr.capture(scene,timeMode,options);
+      hdr.render(scene,timeMode);
+      const width=world.width,height=world.height;
+      const blob=await new Promise((resolve,reject)=>world.toBlob(b=>b?resolve(b):reject(Error('写真の生成に失敗しました。')),'image/jpeg',.95));
+      return {blob,width,height,format:'jpg',quality:quality==='hdr-ultra'?'HDR ULTRA':quality.toUpperCase(),samples:1,colorSpace:'sRGB / SDR'};
+    }finally{
+      markers.forEach(({mesh,visible})=>{mesh.visible=visible;});
+      try{
+        if(ultra){exterior.setQuality(quality,{persist:false});lightingSystem.setQuality(quality);hdr.setQuality(quality);}
+        exterior.update(1,player,timeMode);lightingSystem.update(1,currentBuilding,timeMode,environment.weather);
+      }finally{
+        captureBusy=false;previous=performance.now();resizeWorld();
+      }
+    }
+  }
   let previous=performance.now();
   function animate(now){
-    requestAnimationFrame(animate);const dt=Math.max(0,Math.min((now-previous)/1000,.05));previous=now;frameCount++;
+    requestAnimationFrame(animate);const dt=Math.max(0,Math.min((now-previous)/1000,.05));previous=now;if(captureBusy)return;frameCount++;
     if(started&&!dialogOpen()){
       let forward=(keys.has('KeyW')||keys.has('ArrowUp')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')?1:0)-joy.y;
       let strafe=(keys.has('KeyD')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')?1:0)+joy.x;
@@ -617,7 +647,7 @@
     if(now-lastMap>180){updateLocation();const deg=((player.yaw*180/Math.PI)%360+360)%360;const dirs=['N','NW','W','SW','S','SE','E','NE'];$('compass-direction').textContent=dirs[Math.round(deg/45)%8];lastMap=now;}
     hdr.render(scene,timeMode);
   }
-  function resizeWorld(){resetJoystick();pointer.drag=false;camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);hdr.resize();}
+  function resizeWorld(){if(captureBusy)return;resetJoystick();pointer.drag=false;camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);hdr.resize();}
   addEventListener('resize',resizeWorld);
   window.visualViewport?.addEventListener('resize',resizeWorld);
   world.addEventListener('webglcontextlost',e=>{e.preventDefault();$('loading').style.display='flex';$('loading').style.opacity='1';$('loading-text').textContent='3D描画が中断されました。ページを再読み込みしてください。';});
@@ -667,7 +697,7 @@
     };
   }
   // A read-only diagnostics hook enables reproducible in-browser validation.
-  window.evercity={release:'20260919.1',visualSelfTest,floorTest:validateFloorSurfaces,residenceSnapshot:()=>({room:residenceContext()?.room||null,unit:residenceContext()?.unit?.roomNumber||null,items:interactions.snapshot()}),getState:()=>({buildings:buildings.length,parks:parks.length,landmarks:landmarks.length,position:{x:player.x,y:player.y,z:player.z},floor:player.floor,inside:currentBuilding?.name||null,explored:discovered.size,frames:frameCount,residentialBuildings:buildings.filter(b=>b.type==='residential').length,apartmentCount:buildings.filter(b=>b.type==='residential').reduce((n,b)=>n+(b.floors-1)*2,0),traffic:trafficSystem?.snapshot(),lighting:lightingSystem?.snapshot(),hdr:hdr.snapshot(),story:stories?.data.active,storyProgress:stories?.data.progress,weather:environment?.weather,exterior:exterior?.snapshot(),render:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,pixelRatio:renderer.getPixelRatio()}}),exteriorTest:()=>exterior?.selfTest(),selfTest:()=>{
+  window.evercity={release:'20260919.2',visualSelfTest,floorTest:validateFloorSurfaces,residenceSnapshot:()=>({room:residenceContext()?.room||null,unit:residenceContext()?.unit?.roomNumber||null,items:interactions.snapshot()}),getState:()=>({capturing:captureBusy,buildings:buildings.length,parks:parks.length,landmarks:landmarks.length,position:{x:player.x,y:player.y,z:player.z},floor:player.floor,inside:currentBuilding?.name||null,explored:discovered.size,frames:frameCount,residentialBuildings:buildings.filter(b=>b.type==='residential').length,apartmentCount:buildings.filter(b=>b.type==='residential').reduce((n,b)=>n+(b.floors-1)*2,0),traffic:trafficSystem?.snapshot(),lighting:lightingSystem?.snapshot(),hdr:hdr.snapshot(),story:stories?.data.active,storyProgress:stories?.data.progress,weather:environment?.weather,exterior:exterior?.snapshot(),render:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,pixelRatio:renderer.getPixelRatio()}}),exteriorTest:()=>exterior?.selfTest(),selfTest:()=>{
     const b=buildings.find(v=>v.name==='ATLAS TOWER');const old={...player};player.floor=0;
     const tests={buildingCount:buildings.length===76,allBuildingsHaveFloors:buildings.every(v=>v.floors>=4),atlasHas25Floors:b.floors===25,entrancePassable:!blocked(b.x,b.z+b.d/2),sideWallSolid:blocked(b.x+b.w/2,b.z),backWallSolid:blocked(b.x,b.z-b.d/2),elevatorCoreSolid:blocked(b.x,b.z-b.d/2+3),mapDestinations:landmarks.length===9,groundInteriors:scene.children.some(c=>c.isInstancedMesh)};
     player.floor=1;player.building=b;tests.upperFloorBoundary=blocked(b.x+b.w/2+1,b.z);tests.upperFloorAisle=!blocked(b.x,b.z);Object.assign(player,old);return tests;
@@ -691,11 +721,11 @@
       exterior=new EvercityExterior({THREE:T,scene,renderer,materials,obstacle,sun});
       createCity();buildings.forEach(b=>exterior.building(b));parks.forEach(p=>exterior.park(p));exterior.waterfront();exterior.flush();
       const qualitySelect=$('quality-select');qualitySelect.value=exterior.quality;
-      const updateDetailStatus=()=>{$('detail-status').textContent=exterior.snapshot().components.toLocaleString('ja-JP')+'点の外観パーツ / '+(hdr.enabled?'HDR SUPER LIGHT · 16-bit HDR / 接地AO / Bloom':'ACES / 軽量描画'+(!hdr.supported?'（HDR非対応GPU）':''))+' / '+(lightingSystem?.snapshot().filter||'PCF')+' '+sun.shadow.mapSize.x+'px';};
+      const updateDetailStatus=()=>{$('detail-status').textContent=exterior.snapshot().components.toLocaleString('ja-JP')+'点の外観パーツ / '+(hdr.enabled?(exterior.quality==='hdr-ultra'?'HDR ULTRA · 16-bit HDR / 64-sample AO / Bloom':'HDR SUPER LIGHT · 16-bit HDR / 接地AO / Bloom'):'ACES / 軽量描画'+(!hdr.supported?'（HDR非対応GPU）':''))+' / '+(lightingSystem?.snapshot().filter||'PCF')+' '+sun.shadow.mapSize.x+'px';};
       qualitySelect.onchange=e=>{exterior.setQuality(e.target.value);lightingSystem.setQuality(exterior.quality);hdr.setQuality(exterior.quality);exterior.update(1,player,timeMode);updateDetailStatus();};
       flushBatches();traffic();trafficSystem=new EvercityTraffic({THREE:T,scene,vehicles,people,player,staticBlocked:(x,z)=>blocked(x,z,false,0,null)});lightingSystem=new EvercityLighting({THREE:T,scene,renderer,player,streetFixtures,vehicles,people,ambient,sun,buildings,batchMeshes});lightingSystem.setQuality(exterior.quality);hdr.setQuality(exterior.quality);updateDetailStatus();setupLandmarks();updateDiscovery();updateLocation();setTime('golden');
       environment=new EvercityEnvironment({THREE:T,scene,renderer,player,materials,sun,ambient,skyUniforms,getTime:()=>timeMode,setTime,toast});
-      stories=new EvercityStories({THREE:T,scene,renderer,camera,player,materials,buildings,label,toast,openDialog,closeDialogs,dialogOpen,render:()=>hdr.render(scene,timeMode),start:()=>startGame(),started:()=>started,current:()=>currentBuilding,loadFloor,teleport,blocked,setTime,getTime:()=>timeMode,environment:()=>environment});
+      stories=new EvercityStories({THREE:T,scene,renderer,camera,player,materials,buildings,label,toast,openDialog,closeDialogs,dialogOpen,capturePhoto,start:()=>startGame(),started:()=>started,current:()=>currentBuilding,loadFloor,teleport,blocked,setTime,getTime:()=>timeMode,environment:()=>environment});
       camera.position.set(player.x,player.y,player.z);camera.rotation.set(player.pitch,player.yaw,0);
       $('loading').style.opacity='0';$('loading').style.display='none';$('game').dataset.ready='true';startGame();previous=performance.now();requestAnimationFrame(animate);
       console.info('EVERCITY visual tests',JSON.stringify(visualSelfTest()));

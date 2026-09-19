@@ -17,7 +17,7 @@ window.EvercityStories = class EvercityStories {
     ];
     for(const m of this.missions){const v=this.data.progress[m.id];this.data.progress[m.id]=Number.isInteger(v)?Math.max(0,Math.min(m.steps.length,v)):0;}
     if(!this.missions.some(m=>m.id===this.data.active))this.data.active='garden';
-    this.createResidents();this.createBeacon();this.bind();this.openDatabase();this.renderHUD();
+    this.createResidents();this.createBeacon();this.bind();this.databaseReady=this.openDatabase();this.renderHUD();
     if(this.data.position)document.getElementById('resume-button').classList.remove('hidden');
   }
   static blank(){return {version:3,active:'garden',progress:{},claimed:[],credits:0,position:null,weather:'clear',time:'golden',autoTime:false};}
@@ -70,24 +70,79 @@ window.EvercityStories = class EvercityStories {
     if(this.photoMode)$('photo-hint').textContent=this.canPhotograph()?'✓ 依頼の被写体を捉えています':'自由に撮影 / 依頼の被写体を中央に入れてください';
   }
   canPhotograph(){const s=this.step();if(s?.type!=='photo'||!this.atGoal(s))return false;const T=this.a.THREE,target=s.look||s;const dir=new T.Vector3();this.a.camera.getWorldDirection(dir);const to=new T.Vector3(target.x-this.a.player.x,target.y-this.a.player.y,target.z-this.a.player.z).normalize();return dir.dot(to)>.82;}
-  toggleCamera(force){this.photoMode=force===undefined?!this.photoMode:!!force;document.body.classList.toggle('photo-mode',this.photoMode);document.getElementById('photo-controls').classList.toggle('hidden',!this.photoMode);this.a.start();this.renderHUD();}
+  toggleCamera(force){if(this.busy)return;this.photoMode=force===undefined?!this.photoMode:!!force;document.body.classList.toggle('photo-mode',this.photoMode);document.getElementById('photo-controls').classList.toggle('hidden',!this.photoMode);this.a.start();this.renderHUD();}
   async openDatabase(){try{this.db=await new Promise((resolve,reject)=>{const r=indexedDB.open('evercity-photo-album',1);r.onupgradeneeded=()=>r.result.createObjectStore('photos',{keyPath:'id'});r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}catch(e){this.db=null;}}
-  async putPhoto(record){if(!this.db){this.sessionPhotos.unshift(record);this.sessionPhotos=this.sessionPhotos.slice(0,24);return false;}return new Promise(resolve=>{const tx=this.db.transaction('photos','readwrite');tx.objectStore('photos').put(record);tx.oncomplete=()=>resolve(true);tx.onerror=()=>{this.sessionPhotos.unshift(record);resolve(false);};});}
+  async putPhoto(record){
+    await this.databaseReady;
+    const session=()=>{this.sessionPhotos.unshift(record);this.sessionPhotos=this.sessionPhotos.slice(0,24);return false;};
+    if(!this.db)return session();
+    try{return await new Promise(resolve=>{
+      const tx=this.db.transaction('photos','readwrite');tx.objectStore('photos').put(record);
+      let settled=false;const finish=ok=>{if(settled)return;settled=true;resolve(ok?true:session());};
+      tx.oncomplete=()=>finish(true);tx.onerror=tx.onabort=()=>finish(false);
+    });}catch(e){return session();}
+  }
   async photos(){if(!this.db)return [...this.sessionPhotos];return new Promise(resolve=>{const r=this.db.transaction('photos').objectStore('photos').getAll();r.onsuccess=()=>resolve([...r.result,...this.sessionPhotos].sort((a,b)=>b.time-a.time));r.onerror=()=>resolve([...this.sessionPhotos]);});}
-  async capture(){if(this.busy)return;this.busy=true;document.getElementById('shutter-button').disabled=true;
-    try{const valid=this.canPhotograph();this.a.render();const blob=await new Promise((resolve,reject)=>this.a.renderer.domElement.toBlob(b=>b?resolve(b):reject(Error('capture')),'image/jpeg',.88));const p=this.a.player,record={id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),time:Date.now(),title:this.a.current()?.jp||'エバーシティの街角',floor:p.floor,weather:this.a.environment()?.weather||'clear',blob};const saved=await this.putPhoto(record);
-      document.getElementById('shutter-flash').classList.add('flash');setTimeout(()=>document.getElementById('shutter-flash').classList.remove('flash'),180);
-      if(valid)this.advance('photo');else this.a.toast(saved?'アルバムに写真を保存しました':'写真は今回のセッション内に保存しました');this.trimAlbum();
-    }catch(e){this.a.toast('写真を保存できませんでした。ブラウザの保存設定を確認してください。');}finally{this.busy=false;document.getElementById('shutter-button').disabled=false;}}
-  async trimAlbum(){const records=await this.photos();for(const record of records.slice(24))this.deletePhoto(record.id);}
-  async deletePhoto(id){this.sessionPhotos=this.sessionPhotos.filter(p=>p.id!==id);if(this.db)await new Promise(resolve=>{const tx=this.db.transaction('photos','readwrite');tx.objectStore('photos').delete(id);tx.oncomplete=tx.onerror=()=>resolve();});}
+  async capture(){
+    if(this.busy)return;
+    this.busy=true;this.captureController=new AbortController();
+    const $=id=>document.getElementById(id),ultra=$('photo-quality').value==='hdr-ultra';
+    const valid=this.canPhotograph(),p=this.a.player;
+    const context={time:Date.now(),title:this.a.current()?.jp||'エバーシティの街角',floor:p.floor,weather:this.a.environment()?.weather||'clear'};
+    $('shutter-button').disabled=true;$('photo-status').textContent='';
+    $('capture-cancel').disabled=false;$('capture-progress').value=0;
+    $('capture-message').textContent=ultra?'HDR ULTRAの光と影を準備中…':'現在の画質で再レンダリング中…';
+    this.a.openDialog('capture-dialog');
+    try{
+      // Let the progress dialog paint before allocating high-resolution GPU resources.
+      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+      if(this.captureController.signal.aborted)throw new DOMException('撮影を中止しました。','AbortError');
+      const result=await this.a.capturePhoto(ultra,{signal:this.captureController.signal,progress:(text,value)=>{
+        $('capture-message').textContent=text;$('capture-progress').value=value;
+      }});
+      if(this.captureController.signal.aborted)throw new DOMException('撮影を中止しました。','AbortError');
+      $('capture-cancel').disabled=true;$('capture-message').textContent='アルバムに保存中…';
+      const record={...context,...result,id:crypto.randomUUID?crypto.randomUUID():String(Date.now())};
+      const saved=await this.putPhoto(record);await this.trimAlbum();
+      if(valid)this.advance('photo');
+      $('shutter-flash').classList.add('flash');setTimeout(()=>$('shutter-flash').classList.remove('flash'),180);
+      this.showPhotoResult(record,saved);
+    }catch(e){
+      console.warn('Photo capture:',e);
+      $('capture-dialog').close();
+      $('photo-status').textContent=e.name==='AbortError'?'撮影を中止しました。':(e.message||'撮影できませんでした。通常撮影をお試しください。');
+    }finally{
+      this.busy=false;this.captureController=null;$('shutter-button').disabled=false;
+    }
+  }
+  photoFilename(record){return `evercity-${record.quality==='HDR ULTRA'?'hdr-ultra-':''}${record.width?record.width+'x'+record.height+'-':''}${record.id}.${record.format||'jpg'}`;}
+  showPhotoResult(record,saved){
+    const $=id=>document.getElementById(id);
+    if(this.resultURL)URL.revokeObjectURL(this.resultURL);
+    this.resultURL=URL.createObjectURL(record.blob);
+    $('photo-result-image').src=this.resultURL;
+    $('photo-result-meta').textContent=`${record.quality} / ${record.width} × ${record.height} / ${record.format.toUpperCase()} / ${(record.blob.size/1048576).toFixed(1)} MB`;
+    $('photo-result-storage').textContent=saved?'アルバムに保存済み。下のボタンから原寸画像を端末へ保存できます。':'ブラウザへの永続保存ができませんでした。ページを閉じる前に端末へ保存してください。';
+    const link=$('photo-download');link.href=this.resultURL;link.download=this.photoFilename(record);
+    const file=new File([record.blob],this.photoFilename(record),{type:record.blob.type});
+    const share=$('photo-share');share.hidden=!(navigator.canShare&&navigator.canShare({files:[file]}));
+    share.onclick=async()=>{try{await navigator.share({files:[file],title:record.title});}catch(e){if(e.name!=='AbortError')$('photo-result-storage').textContent='共有できませんでした。「原寸写真を保存」をお使いください。';}};
+    this.a.openDialog('photo-result-dialog');
+  }
+  async trimAlbum(){const records=await this.photos();for(const record of records.slice(24))await this.deletePhoto(record.id);}
+  async deletePhoto(id){this.sessionPhotos=this.sessionPhotos.filter(p=>p.id!==id);if(this.db)await new Promise(resolve=>{const tx=this.db.transaction('photos','readwrite');tx.objectStore('photos').delete(id);tx.oncomplete=tx.onerror=tx.onabort=()=>resolve();});}
   async openAlbum(){this.a.openDialog('album-dialog');const list=document.getElementById('album-grid');list.textContent='写真を読み込んでいます…';this.photoURLs.forEach(URL.revokeObjectURL);this.photoURLs=[];const records=await this.photos();list.replaceChildren();if(!records.length){const p=document.createElement('p');p.textContent='まだ写真がありません。カメラで街の一枚を撮ってみましょう。';list.append(p);}
-    for(const record of records){const card=document.createElement('article'),img=document.createElement('img'),url=URL.createObjectURL(record.blob);this.photoURLs.push(url);img.src=url;img.alt=record.title;img.loading='lazy';const p=document.createElement('p');p.textContent=record.title+' / '+(record.floor+1)+'F';const link=document.createElement('a');link.href=url;link.download='evercity-'+record.id+'.jpg';link.textContent='写真を保存 ↓';const del=document.createElement('button');del.textContent='削除';del.onclick=async()=>{if(confirm('この写真をアルバムから削除しますか？')){await this.deletePhoto(record.id);this.openAlbum();}};card.append(img,p,link,del);list.append(card);}}
+    for(const record of records){const card=document.createElement('article'),img=document.createElement('img'),url=URL.createObjectURL(record.blob);this.photoURLs.push(url);img.src=url;img.alt=record.title;img.loading='lazy';const p=document.createElement('p');p.textContent=record.title+' / '+(record.floor+1)+'F'+(record.width?' / '+record.quality+' · '+record.width+'×'+record.height+' · '+(record.format||'jpg').toUpperCase():'');const link=document.createElement('a');link.href=url;link.download=this.photoFilename(record);link.textContent='写真を保存 ↓';const del=document.createElement('button');del.textContent='削除';del.onclick=async()=>{if(confirm('この写真をアルバムから削除しますか？')){await this.deletePhoto(record.id);this.openAlbum();}};card.append(img,p,link,del);list.append(card);}}
   resume(){const saved=this.data.position;if(!saved){this.a.toast('再開できる記録がありません');return;}if(![saved.x,saved.z,saved.yaw,saved.pitch,saved.floor].every(Number.isFinite)){this.a.toast('位置記録が壊れているため再開できません');return;}
     const b=this.a.buildings.find(b=>b.id===saved.bid);if(saved.floor>0&&!b){this.a.toast('保存した建物が見つかりません');return;}if(saved.floor>0)this.a.loadFloor(b,Math.max(1,Math.min(b.floors,Math.floor(saved.floor))));else this.a.teleport({park:true,x:0,z:72,jp:'セントラル・ガーデン'});
     const p=this.a.player;if(Math.abs(saved.x)<=329&&Math.abs(saved.z)<=330&&!this.a.blocked(saved.x,saved.z)){p.x=saved.x;p.z=saved.z;}p.yaw=saved.yaw;p.pitch=Math.max(-1.35,Math.min(1.35,saved.pitch));this.a.setTime(['day','golden','night'].includes(this.data.time)?this.data.time:'golden');document.getElementById('time-select').value=this.a.getTime();const env=this.a.environment();if(env){env.setWeather(this.data.weather);env.autoTime=!!this.data.autoTime;document.getElementById('auto-time').checked=env.autoTime;}this.a.start();this.a.closeDialogs();this.a.toast('前回の探索から再開しました');}
   bind(){const $=id=>document.getElementById(id);$('journal-button').onclick=()=>this.openJournal();$('story-card').onclick=()=>this.openJournal();$('camera-button').onclick=()=>this.toggleCamera();$('camera-close').onclick=()=>this.toggleCamera(false);$('shutter-button').onclick=()=>this.capture();$('album-button').onclick=() =>this.openAlbum();$('photo-album-button').onclick=()=>this.openAlbum();$('resume-button').onclick=()=>this.resume();$('save-button').onclick=()=>{this.a.toast(this.save()?'現在地と依頼を保存しました':'保存に失敗しました');};
-    addEventListener('keydown',e=>{if(this.a.dialogOpen()||e.repeat)return;if(e.code==='KeyJ')this.openJournal();if(e.code==='KeyP')this.toggleCamera();if(e.code==='Enter'&&this.photoMode){e.preventDefault();this.capture();}if(e.code==='Escape'&&this.photoMode)this.toggleCamera(false);});
+    addEventListener('keydown',e=>{if(this.busy||this.a.dialogOpen()||e.repeat)return;if(e.code==='KeyJ')this.openJournal();if(e.code==='KeyP')this.toggleCamera();if(e.code==='Enter'&&this.photoMode){e.preventDefault();this.capture();}if(e.code==='Escape'&&this.photoMode)this.toggleCamera(false);});
+    const cancel=()=>{this.captureController?.abort();$('capture-cancel').disabled=true;$('capture-message').textContent='撮影を中止しています…';};
+    $('capture-cancel').onclick=cancel;
+    $('capture-dialog').addEventListener('cancel',e=>{e.preventDefault();if(!$('capture-cancel').disabled)cancel();});
+    const updateFrame=()=>document.body.classList.toggle('photo-4k',$('photo-quality').value==='hdr-ultra');
+    $('photo-quality').onchange=updateFrame;updateFrame();
     document.addEventListener('visibilitychange',()=>{if(document.hidden)this.save();});
   }
   update(dt){this.time+=dt;this.saveTimer+=dt;if(this.saveTimer>10){this.saveTimer=0;this.save();}if(Math.floor(this.time*5)!==this.lastHUD){this.lastHUD=Math.floor(this.time*5);this.renderHUD();}for(const n of this.npcs){n.pin.position.y=2.55+Math.sin(this.time*1.6)*.07;n.pin.rotation.y+=dt*.7;}}
