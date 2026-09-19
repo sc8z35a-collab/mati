@@ -4,8 +4,8 @@ window.EvercityExterior = class EvercityExterior {
   constructor({THREE:T,scene,renderer,materials,obstacle,sun}) {
     Object.assign(this,{T,scene,renderer,materials,obstacle,sun});
     this.seed=482731;this.batches=new Map();this.meshes=[];this.counts={};this.elapsed=1;
-    this.quality=matchMedia('(pointer:coarse)').matches?'balanced':'ultra';
-    try{const saved=localStorage.getItem('evercity-quality-v1');if(['balanced','high','ultra'].includes(saved))this.quality=saved;}catch(e){}
+    this.quality='hdr-ultra';
+    try{const saved=localStorage.getItem('evercity-quality-v1');if(['balanced','high','ultra','hdr-ultra'].includes(saved))this.quality=saved;}catch(e){}
     this.dummy=new T.Object3D();this.color=new T.Color();
     this.geometry={box:new T.BoxGeometry(1,1,1),cylinder:new T.CylinderGeometry(1,1,1,12),sphere:new T.IcosahedronGeometry(1,1),leaf:new T.PlaneGeometry(1,1),ring:new T.TorusGeometry(1,.065,6,20)};
     this.makeMaterials();this.makeReflection();
@@ -314,20 +314,20 @@ window.EvercityExterior = class EvercityExterior {
     }
     this.batches.clear();this.setQuality(this.quality);console.info('EVERCITY exterior',JSON.stringify(this.snapshot()));
   }
-  setQuality(value){
-    this.quality=['balanced','high','ultra'].includes(value)?value:'high';
-    const ratio={balanced:1,high:1.5,ultra:2}[this.quality];this.renderer.setPixelRatio(Math.min(devicePixelRatio,ratio));
+  setQuality(value,{persist=true}={}){
+    this.quality=['balanced','high','ultra','hdr-ultra'].includes(value)?value:'high';
+    const ratio={balanced:1,high:1.5,ultra:2,'hdr-ultra':Infinity}[this.quality];this.renderer.setPixelRatio(Math.min(devicePixelRatio,ratio));
     // Quality controls shadows as well as pixels and detail distance.
-    const size=Math.min(this.renderer.capabilities.maxTextureSize,{balanced:1024,high:2048,ultra:4096}[this.quality]);
+    const size=Math.min(this.renderer.capabilities.maxTextureSize,{balanced:1024,high:2048,ultra:4096,'hdr-ultra':8192}[this.quality]);
     if(this.sun&&this.sun.shadow.mapSize.x!==size){this.sun.shadow.map?.dispose();this.sun.shadow.map=null;this.sun.shadow.mapSize.set(size,size);this.renderer.shadowMap.needsUpdate=true;}
-    try{localStorage.setItem('evercity-quality-v1',this.quality);}catch(e){}
+    try{if(persist)localStorage.setItem('evercity-quality-v1',this.quality);}catch(e){}
     this.elapsed=1;
   }
   update(dt,p,mode){
     this.elapsed+=dt;if(this.elapsed<.3)return;this.elapsed=0;
-    const ranges={balanced:{near:75,green:185,roof:135,facade:300},high:{near:120,green:280,roof:210,facade:470},ultra:{near:175,green:380,roof:300,facade:650}}[this.quality];
+    const ranges={'hdr-ultra':{near:Infinity,green:Infinity,roof:Infinity,facade:Infinity},balanced:{near:75,green:185,roof:135,facade:300},high:{near:120,green:280,roof:210,facade:470},ultra:{near:175,green:380,roof:300,facade:650}}[this.quality];
     for(const m of this.meshes){const b=m.userData.bounds,dx=Math.max(b.min.x-p.x,0,p.x-b.max.x),dy=Math.max(b.min.y-p.y,0,p.y-b.max.y),dz=Math.max(b.min.z-p.z,0,p.z-b.max.z),r=ranges[m.userData.detailTier];const distance2=dx*dx+dy*dy+dz*dz;m.visible=distance2<r*r;
-      const casts=m.visible&&this.quality!=='balanced'&&distance2<(this.quality==='ultra'?155:100)**2&&m.material!==this.m.glass&&m.material!==this.m.glow;
+      const casts=m.visible&&this.quality!=='balanced'&&distance2<(this.quality==='hdr-ultra'?Infinity:this.quality==='ultra'?155:100)**2&&m.material!==this.m.glass&&m.material!==this.m.glow;
       if(m.castShadow!==casts){m.castShadow=casts;this.renderer.shadowMap.needsUpdate=true;}}
     if(this.lastMode!==mode){const night=mode==='night';for(const [k,m]of Object.entries(this.materials))m.envMapIntensity=night?.06:k.startsWith('glass')?.75:.24;this.m.glow.emissiveIntensity=night?2.5:.55;this.m.glass.envMapIntensity=night?.12:.65;this.lastMode=mode;}
   }
