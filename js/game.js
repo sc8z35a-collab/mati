@@ -3,6 +3,7 @@
   const $ = id => document.getElementById(id);
   if (!window.THREE) { $('loading-text').textContent = '3Dライブラリを読み込めませんでした。通信接続を確認して再読み込みしてください。'; return; }
   const T = THREE;
+  EvercityLighting.installSunFilter(T);
   let renderer;
   try { renderer = new T.WebGLRenderer({canvas:$('world'), antialias:true, powerPreference:'high-performance'}); }
   catch (e) { $('loading-text').textContent = 'WebGLを起動できません。WebGL対応ブラウザで開いてください。'; return; }
@@ -20,6 +21,7 @@
   scene.fog = new T.FogExp2('#b4c6c6', .00165);
   const camera = new T.PerspectiveCamera(74, innerWidth / innerHeight, .09, 1200);
   camera.rotation.order = 'YXZ';
+  const hdr = new EvercityHDR(T,renderer,camera);
   const ambient = new T.HemisphereLight('#c3e5f4', '#a39376', 2.15);
   scene.add(ambient);
   const sun = new T.DirectionalLight('#ffdda7', 3.2);
@@ -27,8 +29,8 @@
   sun.shadow.mapSize.set(4096,4096);
   Object.assign(sun.shadow.camera,{left:-165,right:165,top:165,bottom:-165,near:1,far:600});
   sun.shadow.normalBias=.12; sun.shadow.bias=-.00015; scene.add(sun); scene.add(sun.target);
-  const skyUniforms = {top:{value:new T.Color('#78a8bf')},bottom:{value:new T.Color('#f1d1a6')},sunColor:{value:new T.Color('#ffe4b7')}};
-  const sky = new T.Mesh(new T.SphereGeometry(850,32,16),new T.ShaderMaterial({side:T.BackSide,depthWrite:false,uniforms:skyUniforms,vertexShader:'varying vec3 vPos; void main(){vPos=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',fragmentShader:'varying vec3 vPos; uniform vec3 top; uniform vec3 bottom; uniform vec3 sunColor; void main(){vec3 p=normalize(vPos); float t=pow(max(p.y,0.0),0.55); vec3 c=mix(bottom,top,t); float glow=pow(max(dot(p,normalize(vec3(-.6,.3,-.8))),0.0),22.0); c+=sunColor*glow*.25; gl_FragColor=vec4(c,1.0);}'}));
+  const skyUniforms = {top:{value:new T.Color('#78a8bf')},bottom:{value:new T.Color('#f1d1a6')},sunColor:{value:new T.Color('#ffe4b7')},sunDirection:{value:new T.Vector3(-130,200,95).normalize()}};
+  const sky = new T.Mesh(new T.SphereGeometry(850,32,16),new T.ShaderMaterial({side:T.BackSide,depthWrite:false,uniforms:skyUniforms,vertexShader:'varying vec3 vPos; void main(){vPos=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',fragmentShader:'varying vec3 vPos; uniform vec3 top; uniform vec3 bottom; uniform vec3 sunColor; uniform vec3 sunDirection; void main(){vec3 p=normalize(vPos); float t=pow(max(p.y,0.0),0.55); vec3 c=mix(bottom,top,t); float glow=pow(max(dot(p,sunDirection),0.0),22.0); c+=sunColor*(glow*.22+pow(max(dot(p,sunDirection),0.0),18000.0)*8.0); gl_FragColor=vec4(c,1.0);}'}));
   scene.add(sky);
   const materials = {};
   function mat(name,color,roughness=.8,metalness=0,extra={}) { materials[name]=new T.MeshStandardMaterial({color,roughness,metalness,...extra}); return materials[name]; }
@@ -530,7 +532,7 @@
     timeMode=mode;const night=mode==='night',day=mode==='day';
     skyUniforms.top.value.set(night?'#08172d':day?'#71b0d3':'#78a8bf');skyUniforms.bottom.value.set(night?'#303e59':day?'#d3e6e9':'#f1d1a6');skyUniforms.sunColor.value.set(night?'#000000':day?'#ecf5ff':'#ffe4b7');
     scene.fog.color.set(night?'#1c2c43':day?'#c7dfe5':'#b4c6c6');scene.fog.density=night?.0022:.00165;
-    ambient.intensity=night?.34:day?1.7:1.25;ambient.color.set(night?'#7c9cc9':'#c3e5f4');sun.intensity=night?.28:day?3.1:3.2;sun.color.set(night?'#9db7e0':day?'#fff1d9':'#ffdda7');sun.position.set(day?90:-130,day?300:200,95);renderer.shadowMap.needsUpdate=true;
+    ambient.intensity=night?.16:day?.68:.44;ambient.color.set(night?'#7c9cc9':'#c3e5f4');sun.intensity=night?.1:day?4.6:4.0;sun.color.set(night?'#9db7e0':day?'#fff1d9':'#ffdda7');sun.position.set(day?90:-130,day?300:200,95);renderer.shadowMap.needsUpdate=true;
     for(const name of ['glass','glassLight','glassWarm'])materials[name].emissiveIntensity=night?(name==='glassWarm'?.95:.12):.09;
     materials.previewGlow.emissiveIntensity=night?1.6:.2;
     materials.glow.emissiveIntensity=night?3.3:1;materials.mintGlow.emissiveIntensity=night?2:.6;
@@ -595,7 +597,7 @@
   };
   let previous=performance.now();
   function animate(now){
-    requestAnimationFrame(animate);const dt=Math.min((now-previous)/1000,.05);previous=now;frameCount++;
+    requestAnimationFrame(animate);const dt=Math.max(0,Math.min((now-previous)/1000,.05));previous=now;frameCount++;
     if(started&&!dialogOpen()){
       let forward=(keys.has('KeyW')||keys.has('ArrowUp')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')?1:0)-joy.y;
       let strafe=(keys.has('KeyD')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')?1:0)+joy.x;
@@ -608,13 +610,14 @@
     }
     camera.position.set(player.x,player.y,player.z);camera.rotation.set(player.pitch,player.yaw,0);sky.position.copy(camera.position);
     if(!dialogOpen()){trafficSystem?.update(dt);interactions.update(dt);stories?.update(dt);environment?.update(started?dt:0,!!currentBuilding&&player.floor<currentBuilding.floors);}
-    lightingSystem?.update(dt,currentBuilding,timeMode);
+    lightingSystem?.update(dt,currentBuilding,timeMode,environment?.weather);
+    skyUniforms.sunDirection.value.copy(sun.position).sub(sun.target.position).normalize();
     exterior?.update(dt,player,timeMode);
     if(trafficSystem&&frameCount%8===0)updateTrafficHUD();
     if(now-lastMap>180){updateLocation();const deg=((player.yaw*180/Math.PI)%360+360)%360;const dirs=['N','NW','W','SW','S','SE','E','NE'];$('compass-direction').textContent=dirs[Math.round(deg/45)%8];lastMap=now;}
-    renderer.render(scene,camera);
+    hdr.render(scene,timeMode);
   }
-  function resizeWorld(){resetJoystick();pointer.drag=false;camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);}
+  function resizeWorld(){resetJoystick();pointer.drag=false;camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);hdr.resize();}
   addEventListener('resize',resizeWorld);
   window.visualViewport?.addEventListener('resize',resizeWorld);
   world.addEventListener('webglcontextlost',e=>{e.preventDefault();$('loading').style.display='flex';$('loading').style.opacity='1';$('loading-text').textContent='3D描画が中断されました。ページを再読み込みしてください。';});
@@ -664,7 +667,7 @@
     };
   }
   // A read-only diagnostics hook enables reproducible in-browser validation.
-  window.evercity={release:'20260918.2',visualSelfTest,floorTest:validateFloorSurfaces,residenceSnapshot:()=>({room:residenceContext()?.room||null,unit:residenceContext()?.unit?.roomNumber||null,items:interactions.snapshot()}),getState:()=>({buildings:buildings.length,parks:parks.length,landmarks:landmarks.length,position:{x:player.x,y:player.y,z:player.z},floor:player.floor,inside:currentBuilding?.name||null,explored:discovered.size,frames:frameCount,residentialBuildings:buildings.filter(b=>b.type==='residential').length,apartmentCount:buildings.filter(b=>b.type==='residential').reduce((n,b)=>n+(b.floors-1)*2,0),traffic:trafficSystem?.snapshot(),lighting:lightingSystem?.snapshot(),story:stories?.data.active,storyProgress:stories?.data.progress,weather:environment?.weather,exterior:exterior?.snapshot(),render:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,pixelRatio:renderer.getPixelRatio()}}),exteriorTest:()=>exterior?.selfTest(),selfTest:()=>{
+  window.evercity={release:'20260919.1',visualSelfTest,floorTest:validateFloorSurfaces,residenceSnapshot:()=>({room:residenceContext()?.room||null,unit:residenceContext()?.unit?.roomNumber||null,items:interactions.snapshot()}),getState:()=>({buildings:buildings.length,parks:parks.length,landmarks:landmarks.length,position:{x:player.x,y:player.y,z:player.z},floor:player.floor,inside:currentBuilding?.name||null,explored:discovered.size,frames:frameCount,residentialBuildings:buildings.filter(b=>b.type==='residential').length,apartmentCount:buildings.filter(b=>b.type==='residential').reduce((n,b)=>n+(b.floors-1)*2,0),traffic:trafficSystem?.snapshot(),lighting:lightingSystem?.snapshot(),hdr:hdr.snapshot(),story:stories?.data.active,storyProgress:stories?.data.progress,weather:environment?.weather,exterior:exterior?.snapshot(),render:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,pixelRatio:renderer.getPixelRatio()}}),exteriorTest:()=>exterior?.selfTest(),selfTest:()=>{
     const b=buildings.find(v=>v.name==='ATLAS TOWER');const old={...player};player.floor=0;
     const tests={buildingCount:buildings.length===76,allBuildingsHaveFloors:buildings.every(v=>v.floors>=4),atlasHas25Floors:b.floors===25,entrancePassable:!blocked(b.x,b.z+b.d/2),sideWallSolid:blocked(b.x+b.w/2,b.z),backWallSolid:blocked(b.x,b.z-b.d/2),elevatorCoreSolid:blocked(b.x,b.z-b.d/2+3),mapDestinations:landmarks.length===9,groundInteriors:scene.children.some(c=>c.isInstancedMesh)};
     player.floor=1;player.building=b;tests.upperFloorBoundary=blocked(b.x+b.w/2+1,b.z);tests.upperFloorAisle=!blocked(b.x,b.z);Object.assign(player,old);return tests;
@@ -688,11 +691,11 @@
       exterior=new EvercityExterior({THREE:T,scene,renderer,materials,obstacle,sun});
       createCity();buildings.forEach(b=>exterior.building(b));parks.forEach(p=>exterior.park(p));exterior.waterfront();exterior.flush();
       const qualitySelect=$('quality-select');qualitySelect.value=exterior.quality;
-      const updateDetailStatus=()=>{$('detail-status').textContent=exterior.snapshot().components.toLocaleString('ja-JP')+'点の追加外観パーツ / 76棟・5公園。近距離優先の描画で負荷を抑えます。';};
-      qualitySelect.onchange=e=>{exterior.setQuality(e.target.value);exterior.update(1,player,timeMode);updateDetailStatus();};updateDetailStatus();
-      flushBatches();traffic();trafficSystem=new EvercityTraffic({THREE:T,scene,vehicles,people,player,staticBlocked:(x,z)=>blocked(x,z,false,0,null)});lightingSystem=new EvercityLighting({THREE:T,scene,renderer,player,streetFixtures,vehicles,ambient,sun});setupLandmarks();updateDiscovery();updateLocation();setTime('golden');
+      const updateDetailStatus=()=>{$('detail-status').textContent=exterior.snapshot().components.toLocaleString('ja-JP')+'点の外観パーツ / '+(hdr.enabled?'HDR SUPER LIGHT · 16-bit HDR / 接地AO / Bloom':'ACES / 軽量描画'+(!hdr.supported?'（HDR非対応GPU）':''))+' / '+(lightingSystem?.snapshot().filter||'PCF')+' '+sun.shadow.mapSize.x+'px';};
+      qualitySelect.onchange=e=>{exterior.setQuality(e.target.value);lightingSystem.setQuality(exterior.quality);hdr.setQuality(exterior.quality);exterior.update(1,player,timeMode);updateDetailStatus();};
+      flushBatches();traffic();trafficSystem=new EvercityTraffic({THREE:T,scene,vehicles,people,player,staticBlocked:(x,z)=>blocked(x,z,false,0,null)});lightingSystem=new EvercityLighting({THREE:T,scene,renderer,player,streetFixtures,vehicles,people,ambient,sun,buildings,batchMeshes});lightingSystem.setQuality(exterior.quality);hdr.setQuality(exterior.quality);updateDetailStatus();setupLandmarks();updateDiscovery();updateLocation();setTime('golden');
       environment=new EvercityEnvironment({THREE:T,scene,renderer,player,materials,sun,ambient,skyUniforms,getTime:()=>timeMode,setTime,toast});
-      stories=new EvercityStories({THREE:T,scene,renderer,camera,player,materials,buildings,label,toast,openDialog,closeDialogs,dialogOpen,start:()=>startGame(),started:()=>started,current:()=>currentBuilding,loadFloor,teleport,blocked,setTime,getTime:()=>timeMode,environment:()=>environment});
+      stories=new EvercityStories({THREE:T,scene,renderer,camera,player,materials,buildings,label,toast,openDialog,closeDialogs,dialogOpen,render:()=>hdr.render(scene,timeMode),start:()=>startGame(),started:()=>started,current:()=>currentBuilding,loadFloor,teleport,blocked,setTime,getTime:()=>timeMode,environment:()=>environment});
       camera.position.set(player.x,player.y,player.z);camera.rotation.set(player.pitch,player.yaw,0);
       $('loading').style.opacity='0';$('loading').style.display='none';$('game').dataset.ready='true';startGame();previous=performance.now();requestAnimationFrame(animate);
       console.info('EVERCITY visual tests',JSON.stringify(visualSelfTest()));
@@ -702,7 +705,7 @@
       console.info('EVERCITY living city',JSON.stringify({residences:buildings.filter(b=>b.type==='residential').length,apartments:buildings.filter(b=>b.type==='residential').reduce((n,b)=>n+2*(b.floors-1),0),intersections:trafficSystem.intersections.length,streetFixtures:streetFixtures.length}));
       const params=new URLSearchParams(location.search);if(params.get('view')==='night'){setTime('night');$('time-select').value='night';}if(params.get('spot')){const b=landmarks.find(v=>v.name.toLowerCase().includes(params.get('spot').toLowerCase()));if(b)teleport(b);}if(params.has('floor')&&params.get('spot')){const b=landmarks.find(v=>!v.park&&v.name.toLowerCase().includes(params.get('spot').toLowerCase()));if(b){loadFloor(b,Math.max(0,Math.min(b.floors,parseInt(params.get('floor'),10)||0)));startGame();if(b.type==='residential'&&player.floor>0&&player.floor<b.floors&&params.get('room')==='living')visitApartment(b,player.floor,true);}}
       if(params.get('weather'))environment.setWeather(params.get('weather'));if(params.get('camera')==='1')stories.toggleCamera(true);if(params.get('journal')==='1')stories.openJournal();if(params.get('resume')==='1')stories.resume();
-      lightingSystem.update(1,currentBuilding,timeMode);updateTrafficHUD();stories.renderHUD();startGame();
+      exterior.update(1,player,timeMode);lightingSystem.update(1,currentBuilding,timeMode,environment.weather);updateTrafficHUD();stories.renderHUD();startGame();
       if(params.get('test')==='1')console.info('EVERCITY floor surface tests',JSON.stringify(validateFloorSurfaces()));
       if(params.get('test')==='1'){console.info('EVERCITY story tests',JSON.stringify(stories.selfTest()));console.info('EVERCITY weather tests',JSON.stringify(environment.selfTest()));}
       if(currentBuilding?.type==='residential'&&player.floor>0&&player.floor<currentBuilding.floors){console.info('EVERCITY apartment paths',JSON.stringify(validateApartmentPaths(currentBuilding,player.floor)));if(params.get('test')==='1')console.info('EVERCITY interaction tests',JSON.stringify(interactions.selfTest()));}

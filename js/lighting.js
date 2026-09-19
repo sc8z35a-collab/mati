@@ -1,33 +1,202 @@
 'use strict';
 window.EvercityLighting = class EvercityLighting {
-  constructor({THREE:T,scene,renderer,player,streetFixtures,vehicles,ambient,sun}){
-    Object.assign(this,{T,scene,renderer,player,streetFixtures,vehicles,ambient,sun});this.elapsed=1;this.lastRoom='';this.lastShadowCell='';
-    const makeSpot=(color,angle,range,shadow=false)=>{const light=new T.SpotLight(color,0,range,angle,.85,2);light.castShadow=shadow;if(shadow){light.shadow.mapSize.set(1024,1024);light.shadow.bias=-.0002;light.shadow.normalBias=.035;light.shadow.camera.near=.2;}scene.add(light,light.target);return light;};
+  // Three r158 hook: only the sun uses the radius > 100 sentinel. Spotlights retain PCF.
+  static installSunFilter(T) {
+    const marker='float getShadow( sampler2D shadowMap';
+    const chunk=T.ShaderChunk.shadowmap_pars_fragment;
+    if(chunk.includes('evercityPCSS'))return;
+    if(!chunk.includes(marker))throw new Error('Unsupported Three.js shadow shader');
+    const filter=`
+      vec2 evercityDisk(int i, float count) {
+        float angle = float(i) * 2.39996323;
+        return vec2(cos(angle), sin(angle)) * sqrt((float(i) + .5) / count);
+      }
+      float evercityPCSS(sampler2D map, vec2 size, vec3 coord, float lightSize) {
+        float blocker = 0.0, blockers = 0.0;
+        float searchRadius = max(3.0 / size.x, lightSize * .18);
+        for(int i=0; i<12; i++) {
+          vec2 uv = clamp(coord.xy + evercityDisk(i,12.0)*searchRadius, vec2(.001), vec2(.999));
+          float depth = unpackRGBAToDepth(texture2D(map,uv));
+          if(depth < coord.z) { blocker += depth; blockers += 1.0; }
+        }
+        if(blockers < .5) return 1.0;
+        // Orthographic light: normalized receiver/blocker separation -> world penumbra.
+        float radius = clamp((coord.z-blocker/blockers)*lightSize, .8/size.x, .008);
+        float count = size.x >= 4096.0 ? 24.0 : 16.0;
+        float visibility = 0.0;
+        for(int i=0; i<24; i++) {
+          if(float(i)>=count)break;
+          vec2 uv=clamp(coord.xy+evercityDisk(i,count)*radius,vec2(.001),vec2(.999));
+          visibility += texture2DCompare(map,uv,coord.z);
+        }
+        return visibility/count;
+      }
+    `;
+    T.ShaderChunk.shadowmap_pars_fragment=chunk.replace(marker,filter+'\n'+marker)
+      .replace('if ( frustumTest ) {',`if ( frustumTest ) {
+        if(shadowRadius > 100.0) {
+          float edge=min(min(shadowCoord.x,1.0-shadowCoord.x),min(shadowCoord.y,1.0-shadowCoord.y));
+          return mix(1.0,evercityPCSS(shadowMap,shadowMapSize,shadowCoord.xyz,shadowRadius-100.0),smoothstep(0.0,.035,edge));
+        }`);
+  }
+  constructor({THREE:T,scene,renderer,player,streetFixtures,vehicles,people,ambient,sun,buildings,batchMeshes}){
+    Object.assign(this,{T,scene,renderer,player,streetFixtures,vehicles,people,ambient,sun,buildings,batchMeshes});
+    this.elapsed=1;this.shadowElapsed=1;this.shadowUpdates=0;this.lastRoom='';this.quality='high';
+    this.direction=new T.Vector3();this.right=new T.Vector3();this.up=new T.Vector3();this.focus=new T.Vector3();this.worldUp=new T.Vector3(0,1,0);
+    const makeSpot=(color,angle,range,shadow=false)=>{
+      const light=new T.SpotLight(color,0,range,angle,.85,2);light.castShadow=shadow;
+      light.shadow.mapSize.set(1024,1024);light.shadow.bias=-.00008;light.shadow.normalBias=.022;
+      light.shadow.camera.near=.15;light.shadow.autoUpdate=false;scene.add(light,light.target);return light;
+    };
     this.streetLights=Array.from({length:6},()=>makeSpot('#ffdba5',1.15,27));
     this.roomLights=Array.from({length:6},(_,i)=>makeSpot('#ffe6bf',1.2,17,i<2));
     this.headlights=Array.from({length:2},()=>makeSpot('#d9edff',.46,32));
+    sun.shadow.autoUpdate=false;
     this.bounce=new T.PointLight('#ffe4c5',0,35,2);scene.add(this.bounce);
-    this.fill=new T.DirectionalLight('#a7d4e2',.3);this.fill.position.set(90,100,-160);scene.add(this.fill);
-    // A procedural soft halo emphasizes luminous fixtures; actual surface illumination is supplied by SpotLights.
-    const canvas=document.createElement('canvas');canvas.width=canvas.height=128;const ctx=canvas.getContext('2d'),g=ctx.createRadialGradient(64,64,0,64,64,64);g.addColorStop(0,'rgba(255,234,186,.75)');g.addColorStop(.12,'rgba(255,226,162,.23)');g.addColorStop(1,'rgba(255,216,142,0)');ctx.fillStyle=g;ctx.fillRect(0,0,128,128);const tex=new T.CanvasTexture(canvas);
+    this.fill=new T.DirectionalLight('#a7d4e2',.12);this.fill.position.set(90,100,-160);scene.add(this.fill);
+    const canvas=document.createElement('canvas');canvas.width=canvas.height=128;
+    const ctx=canvas.getContext('2d'),g=ctx.createRadialGradient(64,64,0,64,64,64);
+    g.addColorStop(0,'rgba(255,234,186,.75)');g.addColorStop(.12,'rgba(255,226,162,.23)');g.addColorStop(1,'rgba(255,216,142,0)');ctx.fillStyle=g;ctx.fillRect(0,0,128,128);
+    const tex=new T.CanvasTexture(canvas);
     this.halos=this.streetLights.map(()=>{const sprite=new T.Sprite(new T.SpriteMaterial({map:tex,transparent:true,depthWrite:false,blending:T.AdditiveBlending,opacity:0}));sprite.scale.set(2.4,2.4,1);scene.add(sprite);return sprite;});
   }
-  update(dt,building,mode){
-    this.elapsed+=dt;if(this.elapsed<.18)return;this.elapsed=0;const p=this.player,night=mode==='night',golden=mode==='golden';const indoor=building&&p.floor<building.floors;
-    const nearby=[...this.streetFixtures].sort((a,b)=>(a.x-p.x)**2+(a.z-p.z)**2-((b.x-p.x)**2+(b.z-p.z)**2));
-    this.streetLights.forEach((light,i)=>{const f=nearby[i];if(!f)return;light.position.set(f.x,6.35,f.z);light.target.position.set(f.x,.12,f.z+.4);const distance=Math.hypot(f.x-p.x,f.z-p.z);light.intensity=distance<85&&!indoor?(night?420:golden?65:0):0;this.halos[i].position.copy(light.position);this.halos[i].material.opacity=light.intensity>0?(night?.64:.13):0;});
-    const fixtures=indoor?[...(building.lights?.[p.floor]||[])].filter(f=>f.enabled!==false&&(building.type!=='residential'||Math.abs(p.x-building.x)<3.4||Math.abs(f.x-building.x)<3.4||Math.sign(f.x-building.x)===Math.sign(p.x-building.x))).sort((a,b)=>(a.x-p.x)**2+(a.z-p.z)**2-((b.x-p.x)**2+(b.z-p.z)**2)):[];
-    const roomKey=(indoor?building.id+':'+p.floor:'outside')+':'+fixtures.slice(0,2).map(f=>`${f.x},${f.z}`).join(';')+mode;
-    const roomChanged=this.lastRoom!==roomKey;
-    this.roomLights.forEach((light,i)=>{const f=fixtures[i];light.intensity=f?f.intensity*(night?2:1.4):0;if(f){light.position.set(f.x,f.y,f.z);light.target.position.set(f.x,f.y-4.5,f.z);light.color.set(f.color);}});
-    this.bounce.intensity=indoor?(night?16:9):0;if(indoor)this.bounce.position.set(building.x,p.floor*5.6+3.3,building.z+building.d*.26);
-    this.fill.intensity=night?.09:golden?.35:.42;
-    const nearestCars=[...this.vehicles].sort((a,b)=>a.g.position.distanceToSquared(new this.T.Vector3(p.x,0,p.z))-b.g.position.distanceToSquared(new this.T.Vector3(p.x,0,p.z)));
-    this.headlights.forEach((light,i)=>{const v=nearestCars[i];if(!v)return;const x=v.axis?v.pos:v.lane,z=v.axis?v.lane:v.pos;light.position.set(x+(v.axis?v.dir*2:0),.83,z+(v.axis?0:v.dir*2));light.target.position.set(x+(v.axis?v.dir*20:0),.15,z+(v.axis?0:v.dir*20));light.intensity=night&&!indoor?190:0;});
-    // Follow the current district with a detailed sun shadow rather than leaving the outskirts unshadowed.
-    const cell=`${Math.round(p.x/65)}:${Math.round(p.z/65)}:${mode}`;
-    if(cell!==this.lastShadowCell){const cx=Math.round(p.x/65)*65,cz=Math.round(p.z/65)*65;this.sun.target.position.set(cx,0,cz);this.sun.position.set(cx+(mode==='day'?90:-130),mode==='day'?300:200,cz+95);this.lastShadowCell=cell;this.renderer.shadowMap.needsUpdate=true;}
-    if(roomChanged){this.lastRoom=roomKey;this.renderer.shadowMap.needsUpdate=true;}
+  setQuality(value){
+    this.quality=['ultra','high','balanced'].includes(value)?value:'high';
+    this.span={ultra:112,high:140,balanced:170}[this.quality];
+    const c=this.sun.shadow.camera;
+    Object.assign(c,{left:-this.span,right:this.span,top:this.span,bottom:-this.span,near:1,far:900});c.updateProjectionMatrix();
+    this.sun.shadow.bias=-.000025;this.sun.shadow.normalBias=this.quality==='balanced'?.1:.035;
+    this.buildings.forEach(b=>{b.shadowProxy.visible=this.quality==='balanced';});
+    // Transparent glass must not become opaque in the depth map. Real slabs/walls cast instead.
+    this.batchMeshes.forEach((mesh,key)=>{mesh.castShadow=!mesh.material.transparent&&
+      (this.quality!=='balanced'||/:(leaf|leaf2|trunk):/.test(key));});
+    this.elapsed=1;this.shadowElapsed=1;this.renderer.shadowMap.needsUpdate=true;
   }
-  snapshot(){return {registeredStreetFixtures:this.streetFixtures.length,streetLights:this.streetLights.filter(l=>l.intensity>0).length,roomLights:this.roomLights.filter(l=>l.intensity>0).length,headlights:this.headlights.filter(l=>l.intensity>0).length};}
+  followSun(mode,weather){
+    const {sun,player:p,direction,right,up,focus}=this;
+    direction.set(mode==='day'?90:-130,mode==='day'?300:200,95).normalize();
+    right.crossVectors(this.worldUp,direction).normalize();up.crossVectors(direction,right).normalize();
+    focus.set(p.x,Math.max(0,p.y-1.7),p.z);
+    const texel=this.span*2/sun.shadow.mapSize.x;
+    const x=Math.round(focus.dot(right)/texel)*texel,y=Math.round(focus.dot(up)/texel)*texel,z=Math.round(focus.dot(direction)/texel)*texel;
+    sun.target.position.copy(right).multiplyScalar(x).addScaledVector(up,y).addScaledVector(direction,z);
+    sun.position.copy(sun.target.position).addScaledVector(direction,420);
+    // Sun angular radius ~0.27 degrees; overcast increases the effective source size.
+    const angular=weather==='clear'?.0047:weather==='cloudy'?.014:.022;
+    sun.shadow.radius=this.quality==='balanced'?1:100+angular*899/(2*this.span);
+  }
+  update(dt,building,mode,weather='clear'){
+    this.elapsed+=dt;this.shadowElapsed+=dt;
+    const p=this.player,night=mode==='night',golden=mode==='golden',indoor=!!building&&p.floor<building.floors;
+    const interval={ultra:1/30,high:1/20,balanced:1/10}[this.quality];
+    if(this.shadowElapsed>=interval){
+      this.followSun(mode,weather);
+      const range=this.quality==='ultra'?85:this.quality==='high'?60:32;
+      for(const actor of [...this.vehicles,...this.people]){
+        const near=(actor.g.position.x-p.x)**2+(actor.g.position.z-p.z)**2<range*range;
+        actor.g.traverse(mesh=>{if(mesh.isMesh)mesh.castShadow=near&&!mesh.material.transparent;});
+      }
+      this.sun.shadow.needsUpdate=true;
+      for(const l of [...this.roomLights,...this.streetLights])if(l.castShadow&&l.intensity>0)l.shadow.needsUpdate=true;
+      this.renderer.shadowMap.needsUpdate=true;this.shadowElapsed=0;this.shadowUpdates++;
+    }
+    if(this.elapsed<.18)return;this.elapsed=0;
+    const nearby=[...this.streetFixtures].sort((a,b)=>(a.x-p.x)**2+(a.z-p.z)**2-((b.x-p.x)**2+(b.z-p.z)**2));
+    this.streetLights.forEach((light,i)=>{const f=nearby[i];if(!f)return;light.position.set(f.x,6.35,f.z);light.target.position.set(f.x,.12,f.z+.4);const distance=Math.hypot(f.x-p.x,f.z-p.z);light.intensity=distance<85&&!indoor?(night?420:golden?65:0):0;light.castShadow=i<(this.quality==='ultra'?2:this.quality==='high'?1:0)&&night&&!indoor;this.halos[i].position.copy(light.position);this.halos[i].material.opacity=light.intensity>0?(night?.34:.08):0;});
+    const fixtures=indoor?[...(building.lights?.[p.floor]||[])].filter(f=>f.enabled!==false&&(building.type!=='residential'||Math.abs(p.x-building.x)<3.4||Math.abs(f.x-building.x)<3.4||Math.sign(f.x-building.x)===Math.sign(p.x-building.x))).sort((a,b)=>(a.x-p.x)**2+(a.z-p.z)**2-((b.x-p.x)**2+(b.z-p.z)**2)):[];
+    this.roomLights.forEach((light,i)=>{const f=fixtures[i];light.intensity=f?f.intensity*(night?2:1.4):0;light.castShadow=!!f&&i<(this.quality==='balanced'?1:2);if(f){light.position.set(f.x,f.y,f.z);light.target.position.set(f.x,f.y-4.5,f.z);light.color.set(f.color);}});
+    this.bounce.intensity=indoor?(night?16:9):0;if(indoor)this.bounce.position.set(building.x,p.floor*5.6+3.3,building.z+building.d*.26);
+    this.fill.intensity=night?.025:golden?.1:.14;
+    const nearestCars=[...this.vehicles].sort((a,b)=>(a.g.position.x-p.x)**2+(a.g.position.z-p.z)**2-((b.g.position.x-p.x)**2+(b.g.position.z-p.z)**2));
+    this.headlights.forEach((light,i)=>{const v=nearestCars[i];if(!v)return;const x=v.axis?v.pos:v.lane,z=v.axis?v.lane:v.pos;light.position.set(x+(v.axis?v.dir*2:0),.83,z+(v.axis?0:v.dir*2));light.target.position.set(x+(v.axis?v.dir*20:0),.15,z+(v.axis?0:v.dir*20));light.intensity=night&&!indoor?190:0;});
+  }
+  snapshot(){return {quality:this.quality,filter:this.quality==='balanced'?'PCF':'PCSS',shadowSize:this.sun.shadow.mapSize.x,shadowTexelMeters:2*this.span/this.sun.shadow.mapSize.x,shadowUpdates:this.shadowUpdates,registeredStreetFixtures:this.streetFixtures.length,streetLights:this.streetLights.filter(l=>l.intensity>0).length,streetShadows:this.streetLights.filter(l=>l.castShadow).length,roomLights:this.roomLights.filter(l=>l.intensity>0).length,roomShadows:this.roomLights.filter(l=>l.castShadow).length,headlights:this.headlights.filter(l=>l.intensity>0).length,dynamicCasters:[...this.vehicles,...this.people].filter(a=>a.g.children.some(m=>m.castShadow)).length};}
+};
+
+// Linear half-float scene -> bright-pass + separable bloom -> contact AO -> ACES -> sRGB.
+// BALANCED/WebGL1 retains the direct rendering path and allocates no HDR buffers.
+window.EvercityHDR = class EvercityHDR {
+  constructor(T,renderer,camera){
+    Object.assign(this,{T,renderer,camera});this.quality='balanced';this.size=new T.Vector2();this.supported=renderer.capabilities.isWebGL2&&renderer.extensions.has('EXT_color_buffer_float');
+    this.screen=new T.Scene();this.screenCamera=new T.OrthographicCamera(-1,1,1,-1,0,1);
+    this.quad=new T.Mesh(new T.PlaneGeometry(2,2));this.quad.frustumCulled=false;this.screen.add(this.quad);
+    const vertexShader='varying vec2 vUv; void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}';
+    this.blur=new T.ShaderMaterial({depthTest:false,depthWrite:false,toneMapped:false,vertexShader,uniforms:{source:{value:null},stepUV:{value:new T.Vector2()},extract:{value:0}},fragmentShader:`
+      varying vec2 vUv;uniform sampler2D source;uniform vec2 stepUV;uniform float extract;
+      vec3 sampleLight(vec2 uv){vec3 c=texture2D(source,uv).rgb;float l=max(max(c.r,c.g),c.b);return extract>.5?c*smoothstep(1.1,2.8,l):c;}
+      void main(){vec3 c=sampleLight(vUv)*.227027;
+        c+=(sampleLight(vUv+stepUV*1.384615)+sampleLight(vUv-stepUV*1.384615))*.316216;
+        c+=(sampleLight(vUv+stepUV*3.230769)+sampleLight(vUv-stepUV*3.230769))*.070270;
+        gl_FragColor=vec4(c,1.);}`});
+    this.composite=new T.ShaderMaterial({depthTest:false,depthWrite:false,vertexShader,uniforms:{sceneColor:{value:null},sceneDepth:{value:null},bloom:{value:null},inverseProjection:{value:new T.Matrix4()},pixel:{value:new T.Vector2()},projectionScale:{value:1},aoStrength:{value:.6},bloomStrength:{value:.07},samples:{value:12}},fragmentShader:`
+      varying vec2 vUv;uniform sampler2D sceneColor,sceneDepth,bloom;uniform mat4 inverseProjection;
+      uniform vec2 pixel;uniform float projectionScale,aoStrength,bloomStrength,samples;
+      vec3 viewPosition(vec2 uv){float d=texture2D(sceneDepth,uv).x;vec4 p=inverseProjection*vec4(uv*2.-1.,d*2.-1.,1.);return p.xyz/p.w;}
+      void main(){
+        float depth=texture2D(sceneDepth,vUv).x;vec3 p=viewPosition(vUv);
+        vec3 dx1=viewPosition(vUv+vec2(pixel.x,0.))-p,dx2=p-viewPosition(vUv-vec2(pixel.x,0.));
+        vec3 dy1=viewPosition(vUv+vec2(0.,pixel.y))-p,dy2=p-viewPosition(vUv-vec2(0.,pixel.y));
+        vec3 n=normalize(cross(abs(dx1.z)<abs(dx2.z)?dx1:dx2,abs(dy1.z)<abs(dy2.z)?dy1:dy2));
+        float occlusion=0.;
+        if(depth<.99999 && -p.z<95.){
+          float screenRadius=min(.09,.7*projectionScale/max(-p.z,.3));
+          for(int i=0;i<16;i++){
+            if(float(i)>=samples)break;
+            float a=float(i)*2.39996323;
+            vec2 uv=vUv+vec2(cos(a)*pixel.x/pixel.y,sin(a))*screenRadius*sqrt((float(i)+.5)/samples);
+            if(uv.x<=0.||uv.y<=0.||uv.x>=1.||uv.y>=1.)continue;
+            vec3 delta=viewPosition(uv)-p;float dist=length(delta);
+            float horizon=max(dot(n,delta)/max(dist,.001)-.12,0.);
+            occlusion+=horizon*(1.-smoothstep(.12,.85,dist))*smoothstep(.02,.08,dist);
+          }
+        }
+        float ao=1.-clamp(occlusion/samples*aoStrength*3.,0.,.42);
+        vec3 color=texture2D(sceneColor,vUv).rgb*ao+texture2D(bloom,vUv).rgb*bloomStrength;
+        gl_FragColor=vec4(color,1.);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`});
+  }
+  release(){
+    if(this.target){this.target.dispose();this.bloomA.dispose();this.bloomB.dispose();this.target=null;this.bloomA=null;this.bloomB=null;}
+  }
+  setQuality(value){this.quality=value;this.enabled=this.supported&&value!=='balanced';if(!this.enabled)this.release();else this.resize();}
+  resize(){
+    if(!this.enabled)return;
+    const {T,renderer}=this;renderer.getDrawingBufferSize(this.size);
+    // Cap render targets independently of screen DPR to avoid 4K/retina memory spikes.
+    const scale=Math.min(1,Math.sqrt(3200000/(this.size.x*this.size.y)));
+    const w=Math.max(1,Math.floor(this.size.x*scale)),h=Math.max(1,Math.floor(this.size.y*scale));
+    if(this.target?.width===w&&this.target?.height===h)return;
+    this.release();
+    this.target=new T.WebGLRenderTarget(w,h,{type:T.HalfFloatType,depthBuffer:true});
+    this.target.depthTexture=new T.DepthTexture(w,h,T.UnsignedIntType);
+    this.target.samples=Math.min(2,renderer.capabilities.maxSamples);
+    this.bloomA=new T.WebGLRenderTarget(Math.max(1,w>>2),Math.max(1,h>>2),{type:T.HalfFloatType,depthBuffer:false});this.bloomB=this.bloomA.clone();
+    // Some WebGL2 drivers expose float support but cannot render this framebuffer combination.
+    renderer.setRenderTarget(this.target);
+    const gl=renderer.getContext(),complete=gl.checkFramebufferStatus(gl.FRAMEBUFFER)===gl.FRAMEBUFFER_COMPLETE;
+    renderer.setRenderTarget(null);
+    if(!complete){this.release();this.supported=false;this.enabled=false;console.warn('HDR framebuffer unavailable; using direct ACES rendering.');return;}
+    this.composite.uniforms.pixel.value.set(1/w,1/h);
+  }
+  render(scene,mode){
+    const r=this.renderer;
+    const exposure=mode==='night'?1.35:mode==='day'?1.02:1.12;
+    r.toneMappingExposure+= (exposure-r.toneMappingExposure)*.035;
+    if(!this.enabled){r.render(scene,this.camera);return;}
+    r.setRenderTarget(this.target);r.render(scene,this.camera);
+    this.lastSceneCalls=r.info.render.calls;
+    this.quad.material=this.blur;
+    const b=this.blur.uniforms;b.source.value=this.target.texture;b.extract.value=1;b.stepUV.value.set(1/this.bloomA.width,0);
+    r.setRenderTarget(this.bloomA);r.render(this.screen,this.screenCamera);
+    b.source.value=this.bloomA.texture;b.extract.value=0;b.stepUV.value.set(0,1/this.bloomA.height);
+    r.setRenderTarget(this.bloomB);r.render(this.screen,this.screenCamera);
+    this.quad.material=this.composite;
+    const u=this.composite.uniforms;u.sceneColor.value=this.target.texture;u.sceneDepth.value=this.target.depthTexture;u.bloom.value=this.bloomB.texture;
+    u.inverseProjection.value.copy(this.camera.projectionMatrixInverse);u.projectionScale.value=this.camera.projectionMatrix.elements[5]*.5;
+    u.samples.value=this.quality==='ultra'?16:8;u.aoStrength.value=this.quality==='ultra'?.7:.5;u.bloomStrength.value=mode==='night'?.1:.055;
+    r.setRenderTarget(null);r.render(this.screen,this.screenCamera);
+  }
+  snapshot(){return {enabled:!!this.enabled,supported:this.supported,pipeline:this.enabled?'RGBA16F / ACES / SSAO / BLOOM':'DIRECT / ACES',resolution:this.target?[this.target.width,this.target.height]:null,exposure:this.renderer.toneMappingExposure,sceneCalls:this.lastSceneCalls};}
 };
