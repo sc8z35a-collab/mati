@@ -4,6 +4,7 @@ window.EvercityExterior = class EvercityExterior {
   constructor({THREE:T,scene,renderer,materials,obstacle,sun}) {
     Object.assign(this,{T,scene,renderer,materials,obstacle,sun});
     this.seed=482731;this.batches=new Map();this.meshes=[];this.counts={};this.elapsed=1;
+    this.objects={};this.placements=[];this.objectComponents=0;
     this.quality='hdr-ultra';
     try{const saved=localStorage.getItem('evercity-quality-v1');if(['balanced','high','ultra','hdr-ultra'].includes(saved))this.quality=saved;}catch(e){}
     this.dummy=new T.Object3D();this.color=new T.Color();
@@ -206,6 +207,7 @@ window.EvercityExterior = class EvercityExterior {
       this.box('masonry',xx,roof+.42,zz,2.8,.65,1.1,tone,0,'roof');this.shrub(xx,roof+.75,zz,1,true);
     }
     this.street(b,signIndex);
+    this.neighborhoodObjects(b);
   }
   bicycle(x,z,color){
     // Bicycle lies parallel to sidewalk: both wheels share the same vertical plane.
@@ -297,6 +299,213 @@ window.EvercityExterior = class EvercityExterior {
     }
     this.panel(5,x+8,1.5,z+24,3,1.5);
     this.box('trim',x+8,.85,z+23.96,.12,1.2,.12,'#526259');
+    this.parkObjects(p);
+  }
+  // Count complete props separately from the primitive parts used to model them.
+  // All new freestanding props have one conservative, stable collision envelope.
+  prop(kind,x,z,w,d,build){
+    const before=Object.values(this.counts).reduce((a,b)=>a+b,0);
+    build();this.objects[kind]=(this.objects[kind]||0)+1;
+    this.objectComponents+=Object.values(this.counts).reduce((a,b)=>a+b,0)-before;
+    this.placements.push({kind,x,z,w,d});this.obstacle(x,z,w,d);
+  }
+  vending(x,z){
+    this.prop('vending-machine',x,z,1.65,1.05,()=>{
+      this.box('trim',x,1.56,z,1.65,2.55,1.05,'#647f79');
+      this.box('dark',x-.2,1.85,z+.54,1.02,1.55,.045);
+      for(let row=0;row<3;row++)for(let col=0;col<4;col++){
+        const xx=x-.57+col*.25,yy=1.32+row*.48;
+        this.cylinder('trim',xx,yy,z+.58,.08,.28,['#c58463','#bdc8a3','#739fbb','#e5d2a1'][col]);
+        this.box('glow',xx,yy-.18,z+.57,.17,.025,.025);
+      }
+      this.box('glow',x+.58,2.05,z+.55,.26,.29,.035);
+      this.box('dark',x+.58,1.6,z+.56,.22,.075,.045);
+      this.box('dark',x,.61,z+.55,1.15,.26,.06);
+      this.box('trim',x,2.9,z,1.76,.13,1.17,'#cfdbcd');
+    });
+  }
+  postbox(x,z){
+    this.prop('postbox',x,z,.85,.7,()=>{
+      this.box('trim',x,1.46,z,.85,1.2,.7,'#a55746');
+      this.box('trim',x,.67,z,.28,.76,.32,'#485b57');
+      this.box('trim',x,2.1,z,.95,.12,.8,'#bc7961');
+      this.box('dark',x,1.8,z+.36,.61,.065,.035);
+      this.box('trim',x,1.46,z+.365,.38,.27,.025,'#ece2c9');
+      this.box('trim',x,.34,z,.58,.1,.5,'#485b57');
+    });
+  }
+  hydrant(x,z){
+    this.prop('fire-hydrant',x,z,.85,.6,()=>{
+      this.cylinder('trim',x,.76,z,.2,.84,'#b77551');
+      this.add('sphere','trim',x,1.2,z,.22,.17,.22,'#bf9166');
+      this.box('trim',x,.93,z,.73,.17,.19,'#bf9166');
+      for(const dx of [-.36,.36])this.box('dark',x+dx,.93,z,.08,.25,.25);
+      this.cylinder('trim',x,.35,z,.3,.11,'#676d60');
+    });
+  }
+  directory(x,z,index){
+    this.prop('wayfinding-totem',x,z,1.1,.48,()=>{
+      this.box('trim',x,1.73,z,1.1,2.9,.32,'#47635d');
+      this.panel(index,x,2,z+.17,.95,1.65);
+      for(let n=0;n<3;n++)this.box('trim',x,1.02-n*.16,z+.18,.73,.035,.025,'#d1c5a7');
+      this.box('trim',x,.34,z,1.1,.1,.48,'#8c9988');
+    });
+  }
+  flowerCart(x,z){
+    this.prop('flower-cart',x,z,3.5,1.3,()=>{
+      this.box('timber',x,.86,z,3.4,.16,1.2,'#b2956e');
+      for(const dx of [-1.3,1.3])for(const dz of [-.42,.42]){
+        this.box('trim',x+dx,.6,z+dz,.08,.6,.08,'#55675b');
+        this.add('ring','dark',x+dx,.46,z+dz,.18,.18,.18);
+      }
+      for(let n=0;n<5;n++){
+        const xx=x-1.3+n*.65;this.cylinder('trim',xx,1.14,z,.23,.4,'#b7b8a0');
+        for(let k=0;k<4;k++){
+          const zz=z+(k%2-.5)*.23,px=xx+(Math.floor(k/2)-.5)*.24,h=1.63+(k%2)*.16;
+          this.cylinder('foliage',px,(1.3+h)/2,zz,.017,h-1.3,'#56704c');
+          this.add('sphere','foliage',px,h,zz,.16,.12,.16,['#dab794','#cb8179','#ede0b1','#aa98b6'][k]);
+        }
+      }
+    });
+  }
+  produceStand(x,z){
+    this.prop('produce-stall',x,z,4.7,1.5,()=>{
+      this.box('timber',x,.96,z,4.7,1.3,1.4,'#ad8760');
+      for(let bin=0;bin<4;bin++){
+        const xx=x-1.73+bin*1.15;
+        this.box('dark',xx,1.63,z,1.01,.03,1.1);
+        for(const dz of [-.57,.57])this.box('timber',xx,1.75,z+dz,1.08,.25,.06,'#d1b182');
+        for(const dx of [-.52,.52])this.box('timber',xx+dx,1.75,z,.05,.25,1.15,'#d1b182');
+        for(let n=0;n<12;n++)this.add('sphere','foliage',xx+(n%4-1.5)*.23,1.8,z+(Math.floor(n/4)-1)*.28,.12,.12,.12,['#bd6b51','#cbaa55','#829257','#b57746'][bin]);
+        this.box('trim',xx,1.36,z+.72,.38,.23,.025,'#eee4cb');
+      }
+      for(const dx of [-2.25,2.25])this.box('trim',x+dx,2,z-.58,.07,3.4,.07,'#5d7361');
+      for(let n=0;n<12;n++)this.box('timber',x-2.2+n*.4,3.67,z,.4,.14,1.5,n%2?'#ddcba5':'#557764');
+    });
+  }
+  newsRack(x,z){
+    this.prop('newspaper-rack',x,z,1.6,.8,()=>{
+      for(const dx of [-.7,.7])this.box('trim',x+dx,1.1,z,.08,1.65,.72,'#50645f');
+      for(let row=0;row<3;row++){
+        const y=.65+row*.5;this.box('trim',x,y,z,1.55,.07,.8,'#50645f');
+        for(let n=0;n<3;n++){
+          this.box('timber',x-.48+n*.48,y+.17,z+.12,.4,.27,.48,['#ded5b7','#97aaa0','#bf9176'][n]);
+          for(let k=0;k<3;k++)this.box('dark',x-.48+n*.48,y+.11+k*.06,z+.365,.28,.017,.012);
+        }
+      }
+    });
+  }
+  luggageCart(x,z){
+    this.prop('luggage-cart',x,z,2,1.25,()=>{
+      this.box('trim',x,.6,z,2,.15,1.25,'#b19a67');
+      for(const dx of [-.85,.85]){
+        this.cylinder('trim',x+dx,1.65,z,.04,2.1,'#bba470');
+        for(const dz of [-.45,.45])this.add('sphere','dark',x+dx,.42,z+dz,.12,.12,.1);
+      }
+      this.box('trim',x,2.71,z,1.75,.08,.08,'#bba470');
+      for(let n=0;n<3;n++){
+        const xx=x-.63+n*.61,h=.7+n%2*.3;
+        this.box('timber',xx,.69+h/2,z,.52,h,.65,['#926f55','#536e6f','#ac987a'][n]);
+        this.box('dark',xx,1.43+n%2*.3,z,.2,.055,.09);
+        for(const dx of [-.15,.15])this.box('trim',xx+dx,.69+h/2,z+.335,.025,h-.08,.02,'#cfb98d');
+      }
+    });
+  }
+  repairStation(x,z){
+    this.prop('cycle-repair-station',x,z,1.6,.7,()=>{
+      this.box('trim',x,1.06,z,.36,1.55,.45,'#688a7c');
+      this.box('dark',x,1.86,z,1.5,.12,.3);
+      for(const dx of [-.55,-.25,.25,.55]){
+        this.box('trim',x+dx,1.32,z+.06,.022,.86,.025,'#596861');
+        this.box('trim',x+dx,.84,z+.06,.1,.22,.07,'#b7beb0');
+      }
+      this.cylinder('trim',x+.65,.71,z,.08,.8,'#8a9990');
+      this.box('dark',x+.65,1.13,z,.4,.05,.08);
+    });
+  }
+  neighborhoodObjects(b){
+    const {x,z,type}=b,index=type==='shop'?6:type==='cafe'?1:type==='gallery'?2:5;
+    this.hydrant(x-25,z+7);this.directory(x-19,z+24.5,index);
+    // West furnishing strip is between the shell (<=22m) and walking lane (29m).
+    this.vending(x-24.5,z-16);this.postbox(x-24.5,z+15);
+    this.repairStation(x-24.5,z);
+    // North-east display bay is separate from bikes, bus shelters and corner trees.
+    if(type==='shop')this.produceStand(x+18,z-24.5);
+    else if(type==='residential')this.flowerCart(x+18,z-24.5);
+    else if(type==='hotel')this.luggageCart(x+18,z-24.5);
+    else this.newsRack(x+18,z-24.5);
+    // Small rooftop gardening station, behind the existing seating and away from the lift.
+    const roof=.32+b.floors*5.6,rx=x+8,rz=z+12;
+    const before=this.counts.roof||0;
+    this.box('timber',rx,roof+.95,rz,3,.14,1.2,'#b0956c',0,'roof');
+    for(const dx of [-1.25,1.25])this.box('trim',rx+dx,roof+.52,rz,.1,.85,1,'#52675a',0,'roof');
+    for(let n=0;n<3;n++){
+      this.cylinder('trim',rx-.9+n*.85,roof+1.2,rz,.22,.35,'#b58363','roof');
+      this.add('sphere','foliage',rx-.9+n*.85,roof+1.56,rz,.27,.32,.27,'#809964',0,0,0,'roof');
+    }
+    this.objectComponents+=(this.counts.roof||0)-before;
+    this.objects['rooftop-herb-bench']=(this.objects['rooftop-herb-bench']||0)+1;
+    (b.solids[b.floors]||=[]).push({x:rx,z:rz,w:1.5,d:.6});
+  }
+  picnicTable(x,z,chess=false){
+    this.prop(chess?'chess-table':'picnic-table',x,z,3.8,3.3,()=>{
+      const top=chess?1.2:2.8;
+      this.box('timber',x,1.58,z,top,.14,1.2,'#b49b72');
+      for(const dx of [-.5,.5])this.box('trim',x+dx,1.1,z,.09,.84,.9,'#53665b');
+      for(const dz of [-1.2,1.2]){
+        for(let slat=0;slat<3;slat++)this.box('timber',x,1.13,z+dz+(slat-1)*.19,chess?1.4:3.4,.09,.16,'#ab9069');
+        for(const dx of [-.55,.55])this.box('trim',x+dx,.87,z+dz,.1,.48,.6,'#53665b');
+      }
+      if(chess){
+        for(let row=0;row<8;row++)for(let col=0;col<8;col++)this.box('trim',x+(col-3.5)*.125,1.657,z+(row-3.5)*.125,.125,.012,.125,(row+col)%2?'#435850':'#e2d7b8');
+        for(const row of [0,1,6,7])for(let col=0;col<8;col++){
+          const px=x+(col-3.5)*.125,pz=z+(row-3.5)*.125,h=row===1||row===6?.08:.13;
+          this.cylinder('trim',px,1.67+h/2,pz,.035,h,row<2?'#dfc99c':'#314a46');
+          this.add('sphere','trim',px,1.67+h,pz,.035,.035,.035,row<2?'#dfc99c':'#314a46');
+        }
+      }else{
+        this.box('timber',x+.7,1.83,z,.6,.36,.45,'#b49a70');
+        this.box('trim',x-.6,1.67,z,.55,.025,.48,'#e4ddc5');
+        this.cylinder('trim',x,1.82,z+.12,.09,.32,'#879c8b');
+      }
+    });
+  }
+  parkObjects(p){
+    const {x,z}=p;
+    this.picnicTable(x-16,z-14,true);this.picnicTable(x-16,z+13);
+    this.prop('playhouse-slide',x+16,z+13,5.2,5.2,()=>{
+      const px=x+16,pz=z+13;
+      for(const dx of [-1,1])for(const dz of [-1,1])this.box('timber',px+dx,1.73,pz+dz,.14,2.15,.14,'#a58961');
+      this.box('timber',px,2.12,pz,2.2,.16,2.2,'#b89c70');
+      for(const dx of [-1,1])this.box('trim',px+dx,2.66,pz,.08,.95,2.1,'#678b7d');
+      // Slide descends toward the lawn, not across a park path.
+      this.add('box','trim',px,1.43,pz+1.85,.95,.09,2.25,'#c5b07a',.67,0,0);
+      for(const dx of [-.5,.5])this.beam('trim',[px+dx,2.29,pz+1],[px+dx,.94,pz+2.6],.05,'#668979');
+      for(let n=0;n<5;n++)this.box('timber',px,.82+n*.28,pz-1.2,.9,.1,.24,'#ba9b6a');
+      this.box('timber',px,3.07,pz,2.5,.12,2.5,'#668979');
+    });
+    this.prop('drinking-fountain',x+24,z+12,1,.8,()=>{
+      this.cylinder('trim',x+24,1.2,z+12,.19,1.8,'#6c8880');
+      this.box('trim',x+24,2.04,z+12,.9,.15,.7,'#bdc8b6');
+      this.box('dark',x+24,2.13,z+12,.65,.02,.46);
+      this.cylinder('trim',x+24.28,2.21,z+12,.04,.19,'#d2d7c1');
+    });
+    this.prop('garden-tool-bench',x+16,z-14,3.4,1.2,()=>{
+      this.box('timber',x+16,1.55,z-14,3.4,.15,1.2,'#bda27a');
+      for(const dx of [-1.45,1.45])this.box('timber',x+16+dx,1.05,z-14,.12,.95,1,'#897651');
+      this.cylinder('trim',x+15.2,1.86,z-14,.25,.47,'#779389');
+      this.beam('trim',[x+15.3,1.76,z-14],[x+15.75,2.04,z-14],.055,'#779389');
+      for(let n=0;n<3;n++)this.cylinder('trim',x+16+n*.4,1.81,z-14,.15,.37,'#b47b5d');
+      this.box('timber',x+16,1.03,z-14,2.7,.12,1,'#a28965');
+      for(let n=0;n<2;n++)this.box('trim',x+15.3+n*1.3,1.23,z-14,1,.28,.7,'#adae80');
+    });
+    this.prop('bird-bath',x-24,z+12,1.2,1.2,()=>{
+      this.cylinder('masonry',x-24,1.15,z+12,.17,1.0,'#c5c4ab');
+      this.cylinder('masonry',x-24,1.67,z+12,.6,.16,'#c5c4ab');
+      this.cylinder('glass',x-24,1.76,z+12,.51,.02,'#9cbbad');
+      this.add('sphere','trim',x-23.61,1.9,z+12,.12,.14,.09,'#8b8675');
+    });
+    this.directory(x+19,z+25,5);
   }
   waterfront(){
     for(let x=-320;x<=320;x+=4){
@@ -331,6 +540,6 @@ window.EvercityExterior = class EvercityExterior {
       if(m.castShadow!==casts){m.castShadow=casts;this.renderer.shadowMap.needsUpdate=true;}}
     if(this.lastMode!==mode){const night=mode==='night';for(const [k,m]of Object.entries(this.materials))m.envMapIntensity=night?.06:k.startsWith('glass')?.75:.24;this.m.glow.emissiveIntensity=night?2.5:.55;this.m.glass.envMapIntensity=night?.12:.65;this.lastMode=mode;}
   }
-  snapshot(){return {quality:this.quality,shadowSize:this.sun?.shadow.mapSize.x,components:Object.values(this.counts).reduce((a,b)=>a+b,0),categories:{...this.counts},batches:this.meshes.length,visibleBatches:this.meshes.filter(m=>m.visible).length,reflection:!!this.scene.environment};}
-  selfTest(){return {denseExterior:this.snapshot().components>50000,instanced:this.meshes.every(m=>m.isInstancedMesh),finiteBounds:this.meshes.every(m=>Number.isFinite(m.boundingSphere.radius)),worldScalePaving:!!this.materials.paving.map,leafCutouts:this.m.leaf.alphaTest>0,environmentReflection:!!this.scene.environment,allTiersPresent:['near','green','roof','facade'].every(k=>this.counts[k]>0)};}
+  snapshot(){return {objects:{...this.objects},objectCount:Object.values(this.objects).reduce((a,b)=>a+b,0),objectComponents:this.objectComponents,propColliders:this.placements.length,quality:this.quality,shadowSize:this.sun?.shadow.mapSize.x,components:Object.values(this.counts).reduce((a,b)=>a+b,0),categories:{...this.counts},batches:this.meshes.length,visibleBatches:this.meshes.filter(m=>m.visible).length,reflection:!!this.scene.environment};}
+  selfTest(){return {objectVariety:Object.keys(this.objects).length>=16,substantialNewObjects:this.snapshot().objectCount>=550,propsHaveCollision:this.placements.length===this.snapshot().objectCount-(this.objects['rooftop-herb-bench']||0),safePropDimensions:this.placements.every(p=>[p.x,p.z,p.w,p.d].every(Number.isFinite)&&p.w>0&&p.d>0),denseExterior:this.snapshot().components>50000,instanced:this.meshes.every(m=>m.isInstancedMesh),finiteBounds:this.meshes.every(m=>Number.isFinite(m.boundingSphere.radius)),worldScalePaving:!!this.materials.paving.map,leafCutouts:this.m.leaf.alphaTest>0,environmentReflection:!!this.scene.environment,allTiersPresent:['near','green','roof','facade'].every(k=>this.counts[k]>0)};}
 };
