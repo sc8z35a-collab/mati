@@ -575,7 +575,7 @@ window.EvercityExterior = class EvercityExterior {
       "near",
     );
   }
-  tree(x, z, s) {
+  tree(x, z, s, ground = 0.765) {
     const colors =
       Math.abs(Math.round(x + z)) % 3
         ? ["#4f795c", "#74976a", "#a5b17a", "#456951"]
@@ -631,12 +631,31 @@ window.EvercityExterior = class EvercityExterior {
         "green",
       );
     }
-    // Tree grate, concentric irrigation ring and corner fasteners.
-    this.box("dark", x, 0.77, z, 2.7, 0.035, 2.7);
+    // Ground the grate on actual soil/grass rather than a fixed planter height.
+    const grateY = ground + 0.0175;
+    this.box("dark", x, grateY, z, 2.7, 0.035, 2.7);
     for (let n = -6; n <= 6; n++)
       if (Math.abs(n) > 1) {
-        this.box("trim", x + n * 0.19, 0.794, z, 0.045, 0.035, 2.6, "#6c766d");
-        this.box("trim", x, 0.794, z + n * 0.19, 2.6, 0.035, 0.045, "#6c766d");
+        this.box(
+          "trim",
+          x + n * 0.19,
+          grateY + 0.024,
+          z,
+          0.045,
+          0.035,
+          2.6,
+          "#6c766d",
+        );
+        this.box(
+          "trim",
+          x,
+          grateY + 0.024,
+          z + n * 0.19,
+          2.6,
+          0.035,
+          0.045,
+          "#6c766d",
+        );
       }
   }
   shrub(x, y, z, s = 1, flowers = false) {
@@ -1179,6 +1198,7 @@ window.EvercityExterior = class EvercityExterior {
     this.street(b, signIndex);
     this.neighborhoodObjects(b);
     this.streetCraft(b);
+    this.livedInBlock(b);
     this.frontageProp(b);
   }
   streetCraft(b) {
@@ -2352,6 +2372,640 @@ window.EvercityExterior = class EvercityExterior {
       );
     });
     this.directory(x + 19, z + 25, 5);
+    this.gardenLife(p);
+  }
+  // Furnishing bays are reserved explicitly: never scatter props onto a walking lane.
+  // Keep this pass's RNG independent so new details do not reshuffle existing facades.
+  livedInBlock(b) {
+    const saved = this.seed;
+    this.seed = (482731 + Math.round(b.x * 71 + b.z * 137)) >>> 0;
+    const { x, z, type } = b;
+    this.bookExchange(x - 24.5, z - 22);
+    this.serviceCabinet(x - 24.5, z - 11);
+    this.sortingBins(x - 24.5, z - 3.5);
+    this.petStation(x - 24.5, z + 11.5);
+    this.streetClock(x - 4.5, z - 24.5);
+    this.cargoCycle(x - 20, z - 24.5);
+    this.flowerUrn(x - 16, z + 24.5);
+    this.flowerUrn(x + 17.5, z + 24.5);
+    this.displayCabinet(x + 24, z - 18, type);
+    this.restBench(x + 24, z + 12);
+    this.gardenLantern(x + 24, z + 16.5);
+    this.gardenLantern(x - 24.5, z + 3.5);
+    this.seed = saved;
+  }
+  groundedProp(kind, x, z, w, d, build, ground = 0.28) {
+    this.prop(kind, x, z, w, d, () => {
+      this.add(
+        "leaf",
+        "contact",
+        x,
+        ground + 0.004,
+        z,
+        w + 0.35,
+        d + 0.35,
+        1,
+        "#ffffff",
+        -Math.PI / 2,
+      );
+      build();
+    });
+  }
+  bookExchange(x, z) {
+    this.groundedProp("community-bookcase", x, z, 1.7, 1.05, () => {
+      this.box("trim", x, 0.68, z, 0.18, 0.8, 0.18, "#466b65");
+      this.box("timber", x, 1.8, z, 1.5, 1.6, 0.7, "#b99062");
+      this.box("dark", x, 1.8, z + 0.36, 1.32, 1.42, 0.02);
+      for (const y of [1.2, 1.8]) {
+        this.box("timber", x, y, z + 0.22, 1.35, 0.065, 0.7, "#d1b486");
+        for (let n = 0; n < 8; n++) {
+          const h = 0.28 + this.random() * 0.17;
+          const xx = x - 0.55 + n * 0.15;
+          this.box(
+            "trim",
+            xx,
+            y + h / 2 + 0.035,
+            z + 0.3,
+            0.11,
+            h,
+            0.3,
+            this.pick(["#b55d46", "#547b78", "#d7b95d", "#e4d7b6", "#7d7893"]),
+          );
+          this.box(
+            "trim",
+            xx,
+            y + 0.13,
+            z + 0.456,
+            0.075,
+            0.026,
+            0.01,
+            "#f0e4c9",
+          );
+        }
+      }
+      for (const side of [-1, 1])
+        this.add(
+          "box",
+          "trim",
+          x + side * 0.4,
+          2.7,
+          z,
+          0.94,
+          0.09,
+          1.03,
+          "#44685f",
+          0,
+          0,
+          -side * 0.3,
+        );
+      this.panel(4, x, 2.42, z + 0.372, 1.2, 0.22);
+      this.box("trim", x + 0.67, 1.7, z + 0.43, 0.035, 0.23, 0.06, "#d6bd7e");
+    });
+  }
+  serviceCabinet(x, z) {
+    this.groundedProp("utility-cabinet", x, z, 1.35, 0.9, () => {
+      this.box("masonry", x, 0.4, z, 1.35, 0.24, 0.9, "#adb2a5");
+      this.box("trim", x, 1.15, z, 1.16, 1.3, 0.68, "#718b82");
+      this.box("trim", x, 1.83, z, 1.28, 0.08, 0.83, "#bcc6ad");
+      for (let n = 0; n < 7; n++)
+        this.box(
+          "dark",
+          x - 0.16,
+          1.1 + n * 0.07,
+          z + 0.348,
+          0.63,
+          0.022,
+          0.018,
+        );
+      this.box("trim", x + 0.38, 1.16, z + 0.36, 0.045, 0.19, 0.035, "#d8d3b8");
+      this.box("trim", x - 0.13, 0.75, z + 0.352, 0.22, 0.14, 0.02, "#d9bd71");
+    });
+  }
+  sortingBins(x, z) {
+    this.groundedProp("sorting-station", x, z, 1.85, 1.0, () => {
+      for (let n = 0; n < 3; n++) {
+        const xx = x + (n - 1) * 0.59;
+        this.box("trim", xx, 0.91, z, 0.52, 1.17, 0.7, "#60746d");
+        this.box(
+          "trim",
+          xx,
+          1.53,
+          z,
+          0.57,
+          0.13,
+          0.78,
+          ["#c7ae5e", "#779caa", "#a7b18a"][n],
+        );
+        this.box("dark", xx, 1.28, z + 0.36, 0.31, 0.13, 0.028);
+        this.add(
+          "ring",
+          "trim",
+          xx,
+          0.91,
+          z + 0.363,
+          0.11,
+          0.11,
+          0.11,
+          "#e6ddc0",
+        );
+      }
+    });
+  }
+  petStation(x, z) {
+    this.groundedProp("pet-care-station", x, z, 0.8, 0.8, () => {
+      this.box("trim", x, 1.17, z, 0.085, 1.78, 0.085, "#4c6b5e");
+      this.box("trim", x, 1.85, z, 0.61, 0.55, 0.23, "#72917a");
+      this.box("dark", x, 1.71, z + 0.124, 0.37, 0.055, 0.024);
+      this.box("trim", x, 0.84, z, 0.6, 0.64, 0.5, "#647567");
+      this.box("trim", x, 1.19, z, 0.69, 0.07, 0.58, "#b2bba1");
+      this.cylinder("trim", x, 0.35, z + 0.27, 0.22, 0.12, "#d2c8a8");
+      this.cylinder("glass", x, 0.416, z + 0.27, 0.18, 0.008, "#a4c2bd");
+    });
+  }
+  streetClock(x, z) {
+    this.groundedProp("street-clock", x, z, 1.5, 1.0, () => {
+      this.cylinder("masonry", x, 0.41, z, 0.38, 0.25, "#acae98");
+      this.cylinder("trim", x, 2.16, z, 0.085, 3.4, "#3e625c");
+      this.add(
+        "cylinder",
+        "trim",
+        x,
+        3.92,
+        z,
+        0.69,
+        0.2,
+        0.69,
+        "#3e625c",
+        Math.PI / 2,
+      );
+      // Two faces and raised hour markers remain legible from either direction.
+      for (const side of [-1, 1]) {
+        this.add(
+          "cylinder",
+          "trim",
+          x,
+          3.92,
+          z + side * 0.115,
+          0.6,
+          0.02,
+          0.6,
+          "#efe4c5",
+          Math.PI / 2,
+        );
+        for (let n = 0; n < 12; n++) {
+          const a = (n * Math.PI) / 6;
+          this.add(
+            "box",
+            "trim",
+            x + Math.sin(a) * 0.5,
+            3.92 + Math.cos(a) * 0.5,
+            z + side * 0.13,
+            0.026,
+            0.085,
+            0.015,
+            "#3e625c",
+            0,
+            0,
+            -a,
+          );
+        }
+        this.beam(
+          "trim",
+          [x, 3.92, z + side * 0.15],
+          [x - 0.22, 4.14, z + side * 0.15],
+          0.025,
+          "#3b5850",
+        );
+        this.beam(
+          "trim",
+          [x, 3.92, z + side * 0.15],
+          [x + 0.32, 4.1, z + side * 0.15],
+          0.02,
+          "#3b5850",
+        );
+      }
+      this.box("trim", x, 3.03, z, 1.46, 0.36, 0.16, "#456b64");
+      this.panel(0, x, 3.03, z + 0.087, 1.4, 0.31);
+    });
+  }
+  cargoCycle(x, z) {
+    this.groundedProp("cargo-bicycle", x, z, 3.3, 1.4, () => {
+      this.bicycle(x - 0.28, z, this.pick(["#6d9c96", "#c18a55", "#a96854"]));
+      this.box("timber", x + 0.82, 1.04, z, 1.04, 0.14, 1.03, "#ad875e");
+      for (const side of [-1, 1]) {
+        for (let n = 0; n < 3; n++) {
+          this.box(
+            "timber",
+            x + 0.82,
+            1.19 + n * 0.16,
+            z + side * 0.49,
+            1.04,
+            0.12,
+            0.07,
+            "#c9a476",
+          );
+          this.box(
+            "timber",
+            x + 0.82 + side * 0.48,
+            1.19 + n * 0.16,
+            z,
+            0.07,
+            0.12,
+            0.94,
+            "#c9a476",
+          );
+        }
+        this.box(
+          "trim",
+          x + 0.82 + side * 0.4,
+          1.31,
+          z + 0.535,
+          0.055,
+          0.59,
+          0.023,
+          "#566d61",
+        );
+      }
+      for (let n = 0; n < 3; n++)
+        this.cylinder(
+          "trim",
+          x + 0.53 + n * 0.27,
+          1.42,
+          z,
+          0.11,
+          0.52,
+          "#e5d3a7",
+        );
+    });
+  }
+  flowerUrn(x, z) {
+    this.groundedProp("ceramic-flower-planter", x, z, 1.8, 1.8, () => {
+      const color = this.pick(["#b77756", "#859b86", "#c6ae86"]);
+      this.cylinder("masonry", x, 0.67, z, 0.62, 0.77, color);
+      this.cylinder("masonry", x, 1.07, z, 0.72, 0.13, color);
+      this.cylinder("dark", x, 1.14, z, 0.62, 0.025, "#81715e");
+      for (let n = 0; n < 14; n++) {
+        const a = n * 2.39996,
+          r = 0.53 * Math.sqrt((n + 1) / 14);
+        const xx = x + Math.cos(a) * r,
+          zz = z + Math.sin(a) * r;
+        this.add(
+          "sphere",
+          "foliage",
+          xx,
+          1.23,
+          zz,
+          0.18,
+          0.16,
+          0.18,
+          "#62836a",
+        );
+        this.flower(
+          xx,
+          1.38 + (n % 3) * 0.08,
+          zz,
+          0.8,
+          ["#e6b7a5", "#f1d79a", "#b3829e"][n % 3],
+        );
+      }
+    });
+  }
+  displayCabinet(x, z, type) {
+    const bakery = type === "cafe" || type === "shop",
+      art = type === "gallery" || type === "office";
+    this.groundedProp(
+      bakery ? "bakery-display" : art ? "art-print-display" : "plant-nursery",
+      x,
+      z,
+      2.25,
+      1.6,
+      () => {
+        this.box("timber", x, 0.67, z, 1.8, 0.12, 1.25, "#b28f66");
+        for (const dx of [-0.8, 0.8])
+          this.box(
+            "trim",
+            x + dx,
+            1.59,
+            z - 0.52,
+            0.075,
+            2.57,
+            0.075,
+            "#52766a",
+          );
+        this.box(
+          "fabric",
+          x,
+          2.88,
+          z,
+          2.2,
+          0.13,
+          1.55,
+          bakery ? "#bd805e" : "#7c9d87",
+        );
+        for (let n = -3; n <= 3; n++)
+          this.box(
+            "fabric",
+            x + n * 0.3,
+            2.97,
+            z,
+            0.14,
+            0.035,
+            1.55,
+            "#e6dac0",
+          );
+        this.box("fabric", x, 2.77, z + 0.72, 2.2, 0.21, 0.07, "#dfcdac");
+        for (const y of [1.03, 1.65]) {
+          this.box("timber", x, y, z, 1.83, 0.085, 1.18, "#b9966b");
+          for (let n = -2; n <= 2; n++) {
+            const xx = x + n * 0.32;
+            if (bakery) {
+              this.box(
+                "timber",
+                xx,
+                y + 0.11,
+                z + 0.1,
+                0.29,
+                0.14,
+                0.64,
+                "#dcc6a0",
+              );
+              for (const dz of [-0.1, 0.15]) {
+                this.add(
+                  "sphere",
+                  "trim",
+                  xx,
+                  y + 0.26,
+                  z + dz,
+                  0.115,
+                  0.08,
+                  0.18,
+                  "#bc8d51",
+                );
+                for (let k = -1; k <= 1; k++)
+                  this.box(
+                    "trim",
+                    xx,
+                    y + 0.331,
+                    z + dz + k * 0.055,
+                    0.1,
+                    0.012,
+                    0.013,
+                    "#edce8e",
+                    0.3,
+                  );
+              }
+            } else if (art) {
+              this.box(
+                "timber",
+                xx,
+                y + 0.22,
+                z + 0.25,
+                0.28,
+                0.38,
+                0.06,
+                "#d9bf93",
+              );
+              this.box(
+                "trim",
+                xx,
+                y + 0.22,
+                z + 0.286,
+                0.23,
+                0.32,
+                0.015,
+                "#e9ddc4",
+              );
+              this.add(
+                "sphere",
+                "trim",
+                xx,
+                y + 0.24,
+                z + 0.3,
+                0.08,
+                0.09,
+                0.008,
+                n % 2 ? "#9a695b" : "#638e89",
+              );
+            } else {
+              this.cylinder(
+                "masonry",
+                xx,
+                y + 0.16,
+                z + 0.1,
+                0.13,
+                0.24,
+                "#b4825d",
+              );
+              this.shrub(xx, y + 0.28, z + 0.1, 0.23, n % 2 === 0);
+            }
+          }
+        }
+        this.panel(bakery ? 1 : art ? 2 : 3, x, 2.51, z - 0.47, 1.4, 0.36);
+      },
+    );
+  }
+  restBench(x, z) {
+    this.groundedProp("side-street-bench", x, z, 2.5, 1.25, () => {
+      for (const dx of [-0.92, 0.92]) {
+        this.box("trim", x + dx, 0.61, z, 0.09, 0.66, 0.8, "#44695f");
+        this.box("trim", x + dx, 1.05, z - 0.43, 0.07, 1.33, 0.07, "#44695f");
+        this.box("trim", x + dx, 1.21, z, 0.075, 0.06, 0.82, "#44695f");
+      }
+      for (let n = 0; n < 5; n++)
+        this.box(
+          "timber",
+          x,
+          0.95,
+          z - 0.36 + n * 0.17,
+          2.43,
+          0.08,
+          0.13,
+          "#b69a72",
+        );
+      for (let n = 0; n < 3; n++)
+        this.box(
+          "timber",
+          x,
+          1.19 + n * 0.17,
+          z - 0.44,
+          2.43,
+          0.13,
+          0.08,
+          "#c4a57b",
+        );
+      this.box("trim", x - 0.65, 1.007, z + 0.1, 0.4, 0.035, 0.32, "#ded7b8");
+    });
+  }
+  gardenLantern(x, z, ground = 0.28) {
+    this.groundedProp(
+      "garden-lantern",
+      x,
+      z,
+      0.65,
+      0.65,
+      () => {
+        this.cylinder("masonry", x, ground + 0.09, z, 0.31, 0.18, "#aab09c");
+        this.box("trim", x, ground + 0.52, z, 0.13, 0.9, 0.13, "#42655a");
+        this.box("glow", x, ground + 1.08, z, 0.25, 0.38, 0.25, "#ffdab0");
+        for (const dx of [-0.18, 0.18])
+          for (const dz of [-0.18, 0.18])
+            this.box(
+              "trim",
+              x + dx,
+              ground + 1.08,
+              z + dz,
+              0.036,
+              0.44,
+              0.036,
+              "#476459",
+            );
+        this.box("trim", x, ground + 1.33, z, 0.5, 0.08, 0.5, "#476459");
+        this.box("trim", x, ground + 0.84, z, 0.43, 0.065, 0.43, "#476459");
+      },
+      ground,
+    );
+  }
+  gardenLife(p) {
+    const saved = this.seed;
+    this.seed = (73147 + Math.round(p.x * 71 + p.z * 137)) >>> 0;
+    const { x, z } = p;
+    for (const side of [-1, 1]) {
+      for (const end of [-1, 1]) {
+        const px = x + side * 8.5,
+          pz = z + end * 11;
+        this.groundedProp(
+          "pollinator-bed",
+          px,
+          pz,
+          2.6,
+          2.5,
+          () => {
+            this.box("timber", px, 0.81, pz, 2.6, 0.32, 2.5, "#ae926b");
+            this.box("dark", px, 0.979, pz, 2.38, 0.025, 2.28, "#85705d");
+            for (let n = 0; n < 22; n++) {
+              const a = n * 2.39996,
+                r = 0.98 * Math.sqrt((n + 1) / 22);
+              const xx = px + Math.sin(a) * r,
+                zz = pz + Math.cos(a) * r;
+              this.shrub(xx, 0.99, zz, 0.3, false);
+              this.flower(
+                xx,
+                1.29 + (n % 4) * 0.08,
+                zz,
+                0.9,
+                ["#d9adcb", "#f0cc86", "#ac99c8", "#f2ddbb"][n % 4],
+              );
+            }
+          },
+          0.65,
+        );
+      }
+      const lx = x + side * 23,
+        lz = z - 12;
+      this.groundedProp(
+        "garden-lounger",
+        lx,
+        lz,
+        1.65,
+        3.4,
+        () => {
+          for (const dx of [-0.58, 0.58])
+            this.box("trim", lx + dx, 0.87, lz, 0.065, 0.43, 2.65, "#607b6b");
+          for (let n = 0; n < 13; n++) {
+            const zz = lz - 1.4 + n * 0.23;
+            const rise = Math.max(0, 4 - n) * 0.15;
+            this.box("timber", lx, 1.09 + rise, zz, 1.53, 0.1, 0.18, "#c4a677");
+          }
+          this.box("fabric", lx, 1.7, lz - 1.12, 1.0, 0.18, 0.45, "#9caf8d");
+        },
+        0.65,
+      );
+      const hx = x + side * 24,
+        hz = z - 23;
+      this.groundedProp(
+        "insect-hotel",
+        hx,
+        hz,
+        1.4,
+        1.0,
+        () => {
+          this.box("timber", hx, 1.08, hz, 0.14, 0.84, 0.14, "#8e7857");
+          this.box("timber", hx, 1.93, hz, 1.15, 1.2, 0.65, "#bda073");
+          this.box("dark", hx, 1.93, hz + 0.334, 0.99, 1.04, 0.02);
+          for (let row = 0; row < 5; row++)
+            for (let col = 0; col < 5; col++) {
+              const xx = hx + (col - 2) * 0.18,
+                yy = 1.56 + row * 0.18;
+              this.add(
+                "cylinder",
+                "timber",
+                xx,
+                yy,
+                hz + 0.37,
+                0.073,
+                0.13,
+                0.073,
+                "#d4b685",
+                Math.PI / 2,
+              );
+              this.add(
+                "cylinder",
+                "dark",
+                xx,
+                yy,
+                hz + 0.442,
+                0.04,
+                0.009,
+                0.04,
+                "#ffffff",
+                Math.PI / 2,
+              );
+            }
+          this.box("trim", hx, 2.6, hz, 1.4, 0.12, 0.96, "#66816d");
+        },
+        0.65,
+      );
+      const tx = x + side * 8,
+        tz = z - 24;
+      this.groundedProp(
+        "viewing-scope",
+        tx,
+        tz,
+        1.1,
+        1.1,
+        () => {
+          this.cylinder("trim", tx, 0.76, tz, 0.48, 0.2, "#8b9989");
+          this.cylinder("trim", tx, 1.42, tz, 0.065, 1.2, "#667e71");
+          this.add(
+            "cylinder",
+            "trim",
+            tx,
+            2.08,
+            tz,
+            0.18,
+            0.84,
+            0.18,
+            "#c9c5a9",
+            Math.PI / 2 + 0.2,
+          );
+          this.add(
+            "cylinder",
+            "glass",
+            tx,
+            2.16,
+            tz - 0.4,
+            0.145,
+            0.04,
+            0.145,
+            "#729fa1",
+            Math.PI / 2 + 0.2,
+          );
+        },
+        0.65,
+      );
+      this.gardenLantern(x + side * 24, z + 18, 0.65);
+    }
+    this.seed = saved;
   }
   waterfront() {
     for (let x = -320; x <= 320; x += 4) {
@@ -2508,8 +3162,21 @@ window.EvercityExterior = class EvercityExterior {
   }
   selfTest() {
     return {
-      objectVariety: Object.keys(this.objects).length >= 16,
-      substantialNewObjects: this.snapshot().objectCount >= 550,
+      objectVariety: Object.keys(this.objects).length >= 37,
+      substantialNewObjects: this.snapshot().objectCount >= 1600,
+      furnishingCoverage: [
+        "community-bookcase",
+        "cargo-bicycle",
+        "street-clock",
+        "utility-cabinet",
+        "sorting-station",
+        "pet-care-station",
+        "side-street-bench",
+      ].every((kind) => this.objects[kind] === 76),
+      gardensEnriched:
+        this.objects["pollinator-bed"] === 20 &&
+        this.objects["insect-hotel"] === 10 &&
+        this.objects["garden-lounger"] === 10,
       propsHaveCollision:
         this.placements.length ===
         this.snapshot().objectCount - (this.objects["rooftop-herb-bench"] || 0),
