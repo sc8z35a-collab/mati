@@ -351,7 +351,7 @@
     cyl("trunk", x, 2.2 * scale, z, 0.19 * scale, 3.7 * scale);
     // Keep a compact shadow-casting canopy underneath the detailed leaf clusters.
     ball("leaf", x, 4.8 * scale, z, 0.85 * scale, 1.3 * scale, 0.85 * scale);
-    exterior?.tree(x, z, scale);
+    exterior?.tree(x, z, scale, planter ? 0.765 : 0.65);
     obstacle(x, z, 0.65, 0.65, 8);
     if (planter) obstacle(x, z, 3.4, 3.4, 0.4);
   }
@@ -3259,7 +3259,7 @@
   }
   // A read-only diagnostics hook enables reproducible in-browser validation.
   window.evercity = {
-    release: "20260919.5",
+    release: "20260920.1",
     objectSnapshot,
     objectTest: objectSelfTest,
     visualSelfTest,

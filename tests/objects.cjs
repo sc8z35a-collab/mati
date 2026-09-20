@@ -64,8 +64,8 @@ const allTrue = (name, result) => {
     }
     allTrue("traffic", await page.evaluate(() => EvercityTraffic.selfTest()));
     const initial = await page.evaluate(() => evercity.objectSnapshot());
-    assert.equal(initial.exterior.objectCount, 648);
-    assert.equal(Object.keys(initial.exterior.objects).length, 21);
+    assert.equal(initial.exterior.objectCount, 1620);
+    assert.equal(Object.keys(initial.exterior.objects).length, 37);
     const exteriorBuildings = await page.evaluate(() =>
       evercity.debug.buildings(),
     );
@@ -77,6 +77,22 @@ const allTrue = (name, result) => {
       "sculpture-plinth": typeCount("gallery"),
       "parcel-locker": typeCount("office", "shop"),
       "herb-garden": 5,
+      "community-bookcase": 76,
+      "utility-cabinet": 76,
+      "sorting-station": 76,
+      "pet-care-station": 76,
+      "street-clock": 76,
+      "cargo-bicycle": 76,
+      "ceramic-flower-planter": 152,
+      "side-street-bench": 76,
+      "garden-lantern": 162,
+      "plant-nursery": typeCount("residential", "hotel"),
+      "bakery-display": typeCount("cafe", "shop"),
+      "art-print-display": typeCount("gallery", "office"),
+      "pollinator-bed": 20,
+      "garden-lounger": 10,
+      "insect-hotel": 10,
+      "viewing-scope": 10,
     }))
       assert.equal(initial.exterior.objects[kind], count, kind);
     assert.equal(
@@ -255,6 +271,75 @@ const allTrue = (name, result) => {
       await page.screenshot({ path: path.join(artifacts, shot.name + ".png") });
       console.log("PASS rendered " + shot.name);
     }
+    // Review unobstructed, actual game renders, not generated concept images.
+    // Keep a controlled RAF so SwiftShader does not run a costly continuous loop.
+    await page.setViewportSize({ width: 1120, height: 700 });
+    const cleanView = await page.addStyleTag({
+      content: "#game > :not(#world) { visibility: hidden !important; }",
+    });
+    const detailShots = [
+      ["bookcase", maple, -24.5, -16.5, 0, -0.02],
+      ["cargo-cycle", maple, -19.3, -20.2, 0.16, -0.14],
+      ["street-clock", maple, -3, -18.2, 0.23, 0.2],
+      ["ceramic-planter", maple, 18.9, 28, 0.38, -0.13],
+      ["nursery", maple, 26, -13.5, 0.38, 0.04],
+      ["bakery", cafe, 25.8, -13.6, 0.38, 0.04],
+      ["art-display", gallery, 25.8, -13.6, 0.38, 0.04],
+      ["service-street", maple, -27, 2, -0.1, -0.02],
+      ["rest-bench", maple, 26, 16, 0.45, -0.1],
+      ["residential-frontage", maple, -18, 31, -0.62, 0.13],
+      ["cafe-frontage", cafe, 18, 31, 0.56, 0.12],
+      ["gallery-frontage", gallery, -18, 31, -0.56, 0.13],
+      ["garden-flowers", null, 6.6, 89, -0.28, -0.04],
+      ["garden-lounger", null, -24, 66, -0.15, -0.13],
+      ["garden-habitat", null, -24, 53.5, 0, 0.02],
+      ["garden-promenade", null, 2, 98, -0.46, 0.03],
+    ];
+    for (const [name, b, dx, dz, yaw, pitch] of detailShots) {
+      await page.evaluate(
+        (s) => {
+          evercity.debug.load(s.id, 0);
+          evercity.debug.pose(s.x, s.z, s.yaw, s.pitch);
+          window.testFrame();
+        },
+        {
+          id: (b || maple).id,
+          x: (b?.x || 0) + dx,
+          z: (b?.z || 0) + dz,
+          yaw,
+          pitch,
+        },
+      );
+      await page.screenshot({
+        path: path.join(artifacts, "review-" + name + ".png"),
+      });
+      console.log("PASS visual review " + name);
+    }
+    // HIGH daytime and night frames exercise shared textures, shadows and emission.
+    await page.evaluate(() => {
+      // Settle the real environment blend in one controlled test frame.
+      // Without this, a paused-RAF "night" screenshot is still mostly daylight.
+      const blend = EvercityEnvironment.prototype.blend;
+      EvercityEnvironment.prototype.blend = function () {
+        blend.call(this, 60);
+      };
+    });
+    await page.selectOption("#quality-select", "high", { force: true });
+    for (const mode of ["day", "night"]) {
+      await page.selectOption("#time-select", mode, { force: true });
+      await page.evaluate((b) => {
+        evercity.debug.load(b.id, 0);
+        evercity.debug.pose(b.x - 24.5, b.z + 9.5, 0, -0.01);
+        window.testFrame();
+      }, maple);
+      await page.screenshot({
+        path: path.join(artifacts, "review-high-" + mode + ".png"),
+      });
+      console.log("PASS HIGH visual review " + mode);
+    }
+    await page.selectOption("#quality-select", "balanced", { force: true });
+    await page.selectOption("#time-select", "golden", { force: true });
+    await cleanView.evaluate((element) => element.remove());
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => window.testFrame());
     assert.equal(
