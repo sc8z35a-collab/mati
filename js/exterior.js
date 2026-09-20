@@ -462,6 +462,7 @@ window.EvercityExterior = class EvercityExterior {
   }
   refreshReflection(p) {
     if (!this.ready || this.quality === "balanced") return;
+    this.visibility?.restore(); // Reflection probes use six different camera views.
     const T = this.T,
       r = this.renderer,
       previous = this.scene.environment,
@@ -3048,6 +3049,9 @@ window.EvercityExterior = class EvercityExterior {
       mesh.userData.detailTier = batch.tier;
       mesh.userData.bounds = mesh.boundingBox;
       this.scene.add(mesh);
+      mesh.updateMatrix();
+      mesh.matrixAutoUpdate = false;
+      this.visibility?.register(mesh);
       this.meshes.push(mesh);
     }
     this.batches.clear();
