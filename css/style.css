@@ -315,6 +315,9 @@ h1 {
   align-items: center;
 }
 .map-heading button {
+  min-width: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
   font-size: 20px;
   padding: 0;
   line-height: 18px;
@@ -523,6 +526,20 @@ dialog::backdrop {
 .close-dialog {
   font-size: 26px;
   color: #b7d0c8;
+}
+.dialog-heading > .close-dialog {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  padding: 0;
+}
+dialog .dialog-feedback {
+  padding: 12px;
+  border: 1px solid var(--mint);
+  border-radius: 4px;
+  color: #e7f2ef;
+  background: #193c37;
+  overflow-wrap: anywhere;
 }
 h2 {
   font-size: 24px;
@@ -994,6 +1011,15 @@ input {
   dialog {
     padding: 22px;
   }
+  .setting-row:has(select) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .setting-row select {
+    width: 100%;
+    min-width: 0;
+  }
   h2 {
     font-size: 20px;
   }
@@ -1163,7 +1189,12 @@ input {
   height: 48px;
 }
 .immersive .residence-layout {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 900px) {
+  .immersive .residence-layout {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  }
 }
 .immersive #game.photo-mode .immersive-actions {
   display: none;

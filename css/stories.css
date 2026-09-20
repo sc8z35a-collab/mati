@@ -180,7 +180,8 @@
 #album-grid img {
   width: 100%;
   aspect-ratio: 16/10;
-  object-fit: cover;
+  object-fit: contain;
+  background: #0b1d22;
   display: block;
 }
 #album-grid p {
@@ -229,7 +230,8 @@
   position: absolute;
   inset: 90px 65px 160px;
   border: 1px solid #ffffff30;
-  background: linear-gradient(
+  background:
+    linear-gradient(
       90deg,
       transparent 33.2%,
       #ffffff20 33.3%,
@@ -314,6 +316,8 @@
 .photo-mode .compass,
 .photo-mode #interaction,
 .photo-mode #crosshair,
+.photo-mode #run-button,
+.photo-mode #joystick,
 .photo-mode .touch-look-label {
   display: none !important;
 }
@@ -638,7 +642,18 @@
   width: 170px;
   pointer-events: auto;
 }
+.immersive #minimap {
+  height: auto;
+}
+.immersive .map-heading {
+  padding: 2px 6px;
+  letter-spacing: 1px;
+}
+.immersive #interact-button {
+  flex-shrink: 0;
+}
 .immersive #interaction {
+  flex-wrap: nowrap;
   width: auto;
   height: auto;
   max-width: calc(100vw - 40px);
@@ -648,6 +663,9 @@
   padding: 8px;
 }
 .immersive #interaction #interaction-label {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
   display: block;
   font-size: 12px;
   max-width: 230px;
@@ -721,5 +739,68 @@
   }
   .photo-options select {
     max-width: 160px;
+  }
+}
+
+/* Settings open on demand so the viewfinder remains unobstructed. */
+#camera-close,
+#photo-options-toggle {
+  top: max(12px, env(safe-area-inset-top));
+  min-height: 44px;
+}
+#camera-close {
+  left: max(12px, env(safe-area-inset-left));
+}
+#photo-options-toggle {
+  position: absolute;
+  left: max(158px, calc(env(safe-area-inset-left) + 146px));
+  z-index: 2;
+  padding: 10px 12px;
+  border: 1px solid #ffffff60;
+  border-radius: 3px;
+  background: #112b32ed;
+  font-size: 11px;
+}
+#photo-options {
+  top: calc(max(12px, env(safe-area-inset-top)) + 58px);
+  bottom: 200px;
+  left: max(12px, env(safe-area-inset-left));
+  width: 300px;
+  max-width: calc(100% - 24px);
+  max-height: none;
+  padding: 12px;
+}
+#photo-options select {
+  min-width: 0;
+  max-width: 100%;
+}
+#photo-options > select {
+  width: 100%;
+}
+#photo-hint {
+  bottom: calc(max(24px, env(safe-area-inset-bottom)) + 94px);
+  width: calc(100% - 32px);
+  max-width: 600px;
+  white-space: normal;
+  margin: 0;
+}
+@media (max-width: 600px) {
+  .photo-mode-label {
+    display: none;
+  }
+  #album-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-height: 520px) {
+  .immersive .minimap-panel {
+    bottom: max(12px, env(safe-area-inset-bottom));
+    width: 125px;
+  }
+  .immersive .story-card {
+    max-height: calc(100dvh - 205px);
+  }
+  #photo-options {
+    bottom: 180px;
   }
 }

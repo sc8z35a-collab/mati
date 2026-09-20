@@ -1823,6 +1823,19 @@
     clearTimeout(toastTimer);
     $("toast").textContent = text;
     $("toast").classList.remove("hidden");
+    // A page-level toast cannot paint above a native modal's top layer.
+    const modal = document.querySelector("dialog[open]");
+    if (modal) {
+      let feedback = modal.querySelector(".dialog-feedback");
+      if (!feedback) {
+        feedback = document.createElement("p");
+        feedback.className = "dialog-feedback";
+        feedback.setAttribute("role", "status");
+        modal.append(feedback);
+      }
+      feedback.textContent = text;
+      feedback.scrollIntoView({ block: "nearest" });
+    }
     toastTimer = setTimeout(() => $("toast").classList.add("hidden"), 4200);
   }
   function updateDiscovery() {
@@ -1994,13 +2007,16 @@
       cabinet: ["ワードローブ", "主寝室 / 引き戸を開けて衣類を見る"],
       washer: ["洗濯機", "浴室 / 運転・一時停止・取り出し"],
       fridge: ["冷蔵庫", "キッチン / スライド扉を開けて食品棚を見る"],
+      balcony: ["バルコニー扉", "リビング / 扉の開閉範囲から離れて操作"],
     };
     const list = $("residence-equipment");
     list.replaceChildren();
     for (const item of interactions
       .snapshot()
-      .filter((i) =>
-        i.id.startsWith(`${b.id}:${player.floor}:${unit.side}:`),
+      .filter(
+        (i) =>
+          i.id.startsWith(`${b.id}:${player.floor}:${unit.side}:`) ||
+          i.id === `${b.id}:${player.floor}:balcony:${unit.side < 0 ? 0 : 1}`,
       )) {
       const [name, hint] = definitions[item.kind] || [item.kind, ""];
       const row = document.createElement("article"),
@@ -2034,6 +2050,8 @@
       row.append(heading, note);
       list.append(row);
     }
+    document.querySelector(".equipment-heading").textContent =
+      `触れて変わる、${list.children.length}つの設備`;
     drawInteriorMap($("residence-map"), b);
     openDialog("residence-dialog");
   }
@@ -2288,8 +2306,8 @@
       joyOrigin.x = e.clientX;
       joyOrigin.y = e.clientY;
       const stick = $("joystick");
-      stick.style.left = `${e.clientX - 54}px`;
-      stick.style.top = `${e.clientY - 54}px`;
+      stick.style.left = `${Math.max(8, Math.min(e.clientX - 54, innerWidth - 116))}px`;
+      stick.style.top = `${Math.max(8, Math.min(e.clientY - 54, innerHeight - 116))}px`;
       stick.classList.add("active");
       world.setPointerCapture(e.pointerId);
       setJoystick(e);
@@ -2368,7 +2386,10 @@
     document.querySelectorAll("dialog[open]").forEach((d) => {
       if (d.id !== id) d.close();
     });
-    if (!$(id).open) $(id).showModal();
+    if (!$(id).open) {
+      $(id).querySelector(".dialog-feedback")?.remove();
+      $(id).showModal();
+    }
   }
   function closeDialogs() {
     document.querySelectorAll("dialog[open]").forEach((d) => d.close());
@@ -2637,7 +2658,8 @@
       12,
     );
     ctx.fillText("N ↑", w - 24, 12);
-    $("coordinates").textContent = player.floor + 1 + "F";
+    $("coordinates").textContent =
+      player.floor === b.floors ? "RF" : player.floor + 1 + "F";
   }
   function drawMap(canvas, full = false) {
     if (!full && currentBuilding) {
@@ -2745,8 +2767,9 @@
       ctx.fillStyle = "#416872";
       ctx.fillRect(px(-335), pz(-360), 670 * scale, 12 * scale);
     }
-    $("coordinates").textContent =
-      `${Math.round(player.x)}, ${Math.round(player.z)}`;
+    if (!full)
+      $("coordinates").textContent =
+        `${Math.round(player.x)}, ${Math.round(player.z)}`;
   }
   function updateTrafficHUD() {
     const s = trafficSystem.snapshot();
