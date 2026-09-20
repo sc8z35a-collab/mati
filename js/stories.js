@@ -587,6 +587,8 @@ window.EvercityStories = class EvercityStories {
   openJournal() {
     const $ = (id) => document.getElementById(id);
     $("journal-credits").textContent = this.data.credits + " EC";
+    document.querySelector(".journal-summary > span").textContent =
+      `${this.missions.length} STORIES · ${this.people.length} RESIDENTS`;
     const list = $("mission-list");
     list.replaceChildren();
     for (const m of this.missions) {
@@ -687,6 +689,11 @@ window.EvercityStories = class EvercityStories {
     if (this.busy) return;
     this.photoMode = force === undefined ? !this.photoMode : !!force;
     if (this.photoMode) {
+      this.a.closeDialogs();
+      document.getElementById("photo-options").hidden = true;
+      document
+        .getElementById("photo-options-toggle")
+        .setAttribute("aria-expanded", "false");
       this.walkFov = this.a.camera.fov;
       document.getElementById("photo-fov").value = this.walkFov;
     } else if (this.walkFov) {
@@ -816,6 +823,11 @@ window.EvercityStories = class EvercityStories {
       time: Date.now(),
       title: this.a.current()?.jp || "エバーシティの街角",
       floor: p.floor,
+      location: !this.a.current()
+        ? "屋外"
+        : p.floor === this.a.current().floors
+          ? "RF"
+          : `${p.floor + 1}F`,
       weather: this.a.environment()?.weather || "clear",
     };
     $("shutter-button").disabled = true;
@@ -861,10 +873,13 @@ window.EvercityStories = class EvercityStories {
     } catch (e) {
       console.warn("Photo capture:", e);
       $("capture-dialog").close();
+      $("photo-options").hidden = false;
+      $("photo-options-toggle").setAttribute("aria-expanded", "true");
       $("photo-status").textContent =
         e.name === "AbortError"
           ? "撮影を中止しました。"
           : e.message || "撮影できませんでした。通常撮影をお試しください。";
+      $("photo-status").scrollIntoView({ block: "nearest" });
     } finally {
       this.busy = false;
       this.captureController = null;
@@ -874,7 +889,7 @@ window.EvercityStories = class EvercityStories {
   photoFilename(record) {
     return `evercity-${record.quality === "HDR ULTRA" ? "hdr-ultra-" : ""}${record.width ? record.width + "x" + record.height + "-" : ""}${record.id}.${record.format || "jpg"}`;
   }
-  showPhotoResult(record, saved) {
+  showPhotoResult(record, saved, source = "capture") {
     const $ = (id) => document.getElementById(id);
     if (this.resultURL) URL.revokeObjectURL(this.resultURL);
     this.resultURL = URL.createObjectURL(record.blob);
@@ -903,6 +918,12 @@ window.EvercityStories = class EvercityStories {
             "共有できませんでした。「原寸写真を保存」をお使いください。";
       }
     };
+    const back = $("photo-result-back");
+    back.textContent = source === "album" ? "アルバムに戻る" : "撮影に戻る";
+    back.onclick = () => {
+      $("photo-result-dialog").close();
+      if (source === "album") this.openAlbum();
+    };
     this.a.openDialog("photo-result-dialog");
   }
   // Originals are deleted only by an explicit album action.
@@ -921,15 +942,18 @@ window.EvercityStories = class EvercityStories {
   async openAlbum() {
     this.a.openDialog("album-dialog");
     const list = document.getElementById("album-grid");
-    list.textContent = "写真を読み込んでいます…";
+    const message = document.createElement("p");
+    message.textContent = "写真を読み込んでいます…";
+    list.replaceChildren(message);
     this.photoURLs.forEach(URL.revokeObjectURL);
     this.photoURLs = [];
     const records = await this.photos();
     if (!document.getElementById("album-dialog").open) return;
     list.replaceChildren();
     if (!records.length) {
-      list.textContent =
+      message.textContent =
         "まだ写真がありません。カメラで街を撮影してみましょう。";
+      list.append(message);
       return;
     }
     const note = document.createElement("p");
@@ -977,7 +1001,7 @@ window.EvercityStories = class EvercityStories {
             .catch(() => {});
         }
         const p = document.createElement("p");
-        p.textContent = `${record.title} / ${record.floor + 1}F / ${record.width}×${record.height}`;
+        p.textContent = `${record.title} / ${record.location || (record.floor > 0 ? record.floor + 1 + "F" : "階情報なし")} / ${record.width}×${record.height}`;
         const view = document.createElement("button");
         view.textContent = "原寸を表示・保存";
         view.onclick = async () => {
@@ -985,6 +1009,7 @@ window.EvercityStories = class EvercityStories {
             this.showPhotoResult(
               await this.photo(record.id),
               !this.sessionPhotos.some((p) => p.id === record.id),
+              "album",
             );
           } catch (e) {
             this.a.toast(e.message);
@@ -1071,6 +1096,14 @@ window.EvercityStories = class EvercityStories {
     $("story-card").onclick = () => this.openJournal();
     $("camera-button").onclick = () => this.toggleCamera();
     $("camera-close").onclick = () => this.toggleCamera(false);
+    $("photo-options-toggle").onclick = () => {
+      const panel = $("photo-options");
+      panel.hidden = !panel.hidden;
+      $("photo-options-toggle").setAttribute(
+        "aria-expanded",
+        String(!panel.hidden),
+      );
+    };
     $("shutter-button").onclick = () => this.capture();
     $("album-button").onclick = () => this.openAlbum();
     $("photo-album-button").onclick = () => this.openAlbum();
@@ -1105,11 +1138,11 @@ window.EvercityStories = class EvercityStories {
       document.body.classList.add("photo-4k");
       document.documentElement.style.setProperty(
         "--photo-width",
-        `min(100vw, ${aspect * 100}vh)`,
+        `min(100vw, ${aspect * 100}dvh)`,
       );
       document.documentElement.style.setProperty(
         "--photo-height",
-        `min(100vh, ${100 / aspect}vw)`,
+        `min(100dvh, ${100 / aspect}vw)`,
       );
     };
     $("photo-aspect").onchange = updateFrame;

@@ -6,18 +6,22 @@
       name="viewport"
       content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"
     />
-    <meta name="evercity-release" content="20260920.1" />
+    <meta name="evercity-release" content="20260920.2" />
     <meta name="theme-color" content="#101d23" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23101d23'/%3E%3Cpath d='M6 25V13h5v12m3 0V6h5v19m3 0V10h5v15' fill='%2382e3c9'/%3E%3C/svg%3E" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23101d23'/%3E%3Cpath d='M6 25V13h5v12m3 0V6h5v19m3 0V10h5v15' fill='%2382e3c9'/%3E%3C/svg%3E"
+    />
     <title>EVERCITY — 境界のない都市へ</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
       href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/style.css?v=20260920.1" />
-    <link rel="stylesheet" href="css/living-city.css?v=20260920.1" />
-    <link rel="stylesheet" href="css/stories.css?v=20260920.1" />
+    <link rel="stylesheet" href="css/style.css?v=20260920.2" />
+    <link rel="stylesheet" href="css/living-city.css?v=20260920.2" />
+    <link rel="stylesheet" href="css/stories.css?v=20260920.2" />
   </head>
   <body class="immersive">
     <main id="game" aria-label="3D都市探索ゲーム">
@@ -178,14 +182,19 @@
         <div class="photo-grid"></div>
         <button id="camera-close">✕ カメラを閉じる</button
         ><span class="photo-mode-label">EVERCITY / PHOTO MODE</span>
-        <div class="photo-options">
+        <button
+          id="photo-options-toggle"
+          aria-expanded="false"
+          aria-controls="photo-options"
+        >
+          撮影設定
+        </button>
+        <div id="photo-options" class="photo-options" hidden>
           <label for="photo-quality">撮影品質</label
           ><select id="photo-quality">
             <option value="balanced">軽量 / PNG</option>
             <option value="high">高精細 / HDR・PNG</option>
-            <option value="hdr-ultra">
-              最高品質 / HDR・8サンプル・PNG
-            </option></select
+            <option value="hdr-ultra">最高品質 / HDR 8x PNG</option></select
           ><label
             >解像度<select id="photo-resolution">
               <option value="1920">長辺1920px</option>
@@ -477,7 +486,7 @@
       </div>
       <h2>持ち帰りたい、街の記憶。</h2>
       <p>
-        最大24枚をこのブラウザに保存します。4K写真は3840×2160のPNG原本を保存。大切な写真は「写真を保存」から端末へ書き出してください。HDR演算をACESでSDRに変換した画像で、HDRディスプレイ用ファイルではありません。
+        一覧は24枚ずつ表示し、写真は自動削除しません。保存枚数はブラウザの空き容量によります。4Kは長辺3840pxで、縦横比に応じたPNG原本を保存します。大切な写真は端末にも保存してください。HDR演算をACESでSDRに変換した画像で、HDRディスプレイ用ファイルではありません。
       </p>
       <div id="album-grid"></div>
     </dialog>
@@ -519,7 +528,9 @@
         PNGは非可逆圧縮なしのsRGB /
         SDR画像です。保存先はブラウザの設定によります。スマホでは共有から「画像を保存」、またはダウンロード先を確認してください。
       </p>
-      <button class="secondary-button close-dialog">撮影に戻る</button>
+      <button id="photo-result-back" class="secondary-button">
+        撮影に戻る
+      </button>
     </dialog>
     <dialog
       id="residence-dialog"
@@ -554,15 +565,15 @@
       <button class="primary-button close-dialog">住戸の探索に戻る</button>
     </dialog>
     <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
-    <script src="js/traffic.js?v=20260920.1"></script>
-    <script src="js/interactions.js?v=20260920.1"></script>
-    <script src="js/residences.js?v=20260920.1"></script>
-    <script src="js/lighting.js?v=20260920.1"></script>
-    <script src="js/environment.js?v=20260920.1"></script>
-    <script src="js/exterior.js?v=20260920.1"></script>
-    <script src="js/audio.js?v=20260920.1"></script>
-    <script src="js/photography.js?v=20260920.1"></script>
-    <script src="js/stories.js?v=20260920.1"></script>
-    <script src="js/game.js?v=20260920.1"></script>
+    <script src="js/traffic.js?v=20260920.2"></script>
+    <script src="js/interactions.js?v=20260920.2"></script>
+    <script src="js/residences.js?v=20260920.2"></script>
+    <script src="js/lighting.js?v=20260920.2"></script>
+    <script src="js/environment.js?v=20260920.2"></script>
+    <script src="js/exterior.js?v=20260920.2"></script>
+    <script src="js/audio.js?v=20260920.2"></script>
+    <script src="js/photography.js?v=20260920.2"></script>
+    <script src="js/stories.js?v=20260920.2"></script>
+    <script src="js/game.js?v=20260920.2"></script>
   </body>
 </html>
