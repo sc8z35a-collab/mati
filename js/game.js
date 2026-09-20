@@ -40,6 +40,7 @@
   );
   camera.rotation.order = "YXZ";
   const hdr = new EvercityHDR(T, renderer, camera);
+  const visibility = new EvercityVisibility(T);
   const ambient = new T.HemisphereLight("#c3e5f4", "#a39376", 2.15);
   scene.add(ambient);
   const sun = new T.DirectionalLight("#ffdda7", 3.2);
@@ -1406,6 +1407,12 @@
   }
   function flushBatches() {
     let count = 0;
+    // Instance indices referenced by doors, previews and diagnostics remain stable.
+    const mutableKeys = new Set();
+    for (const b of buildings)
+      for (const refs of [b.previews, b.windows, b.slabs])
+        for (const ref of Object.values(refs || {}).flat())
+          if (ref?.key) mutableKeys.add(ref.key);
     for (const [key, items] of batches) {
       const [kind, name] = key.split(":");
       const geo =
@@ -1428,6 +1435,9 @@
       mesh.receiveShadow = true;
       mesh.computeBoundingSphere();
       scene.add(mesh);
+      mesh.updateMatrix();
+      mesh.matrixAutoUpdate = false;
+      if (!mutableKeys.has(key)) visibility.register(mesh);
       batchMeshes.set(key, mesh);
       count += items.length;
     }
@@ -2826,6 +2836,7 @@
       mesh.visible = false;
     });
     try {
+      visibility.restore(); // Tile cameras and photo FOV must see the full scene.
       hdr.release();
       exterior.setQuality(photoQuality, { persist: false });
       lightingSystem.setQuality(photoQuality);
@@ -3000,6 +3011,7 @@
       $("compass-direction").textContent = dirs[Math.round(deg / 45) % 8];
       lastMap = now;
     }
+    visibility.prepare(camera, exterior?.quality === "balanced");
     hdr.render(scene, timeMode);
   }
   function resizeWorld() {
@@ -3282,7 +3294,7 @@
   }
   // A read-only diagnostics hook enables reproducible in-browser validation.
   window.evercity = {
-    release: "20260920.1",
+    release: "20260920.3",
     objectSnapshot,
     objectTest: objectSelfTest,
     visualSelfTest,
@@ -3315,6 +3327,7 @@
       storyProgress: stories?.data.progress,
       weather: environment?.weather,
       exterior: exterior?.snapshot(),
+      visibility: visibility.snapshot(),
       render: {
         calls: renderer.info.render.calls,
         triangles: renderer.info.render.triangles,
@@ -3348,6 +3361,11 @@
   // Explicit opt-in inspection controls for regression tests, never used by gameplay.
   if (new URLSearchParams(location.search).get("test") === "1")
     window.evercity.debug = {
+      visibility: (enabled) => {
+        visibility.enabled = enabled;
+        visibility.restore();
+        return visibility.snapshot();
+      },
       stories: () => ({
         data: structuredClone(stories.data),
         missions: stories.missions.map((m) => ({
@@ -3433,7 +3451,9 @@
       buildings.forEach((b) => exterior.building(b));
       parks.forEach((p) => exterior.park(p));
       exterior.waterfront();
+      exterior.visibility = visibility;
       exterior.flush();
+      visibility.setBuildings(buildings, BASE, FLOOR);
       exterior.ready = true;
       const qualitySelect = $("quality-select");
       qualitySelect.value = exterior.quality;

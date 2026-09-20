@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"
     />
-    <meta name="evercity-release" content="20260920.2" />
+    <meta name="evercity-release" content="20260920.3" />
     <meta name="theme-color" content="#101d23" />
     <link
       rel="icon"
@@ -19,9 +19,9 @@
       href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/style.css?v=20260920.2" />
-    <link rel="stylesheet" href="css/living-city.css?v=20260920.2" />
-    <link rel="stylesheet" href="css/stories.css?v=20260920.2" />
+    <link rel="stylesheet" href="css/style.css?v=20260920.3" />
+    <link rel="stylesheet" href="css/living-city.css?v=20260920.3" />
+    <link rel="stylesheet" href="css/stories.css?v=20260920.3" />
   </head>
   <body class="immersive">
     <main id="game" aria-label="3D都市探索ゲーム">
@@ -342,15 +342,19 @@
           <option value="hdr-ultra">HDR ULTRA / 最高品質</option>
           <option value="ultra">ULTRA / HDR SUPER Light</option>
           <option value="high">HIGH / HDR 高精細</option>
-          <option value="balanced">BALANCED / 軽量</option>
+          <option value="balanced">LOW / 軽量・鮮明</option>
         </select></label
       >
       <p id="detail-status" class="dialog-note" aria-live="polite">
         外観のディテールを構築中
       </p>
       <p class="dialog-note">
-        初回はPCでHIGH、タッチ端末でBALANCED。動作が重い状態が続くと画質を一段下げます。自動調整は上の設定で無効にできます。HDR
+        初回はPCでHIGH、タッチ端末でLOW（旧BALANCED）。動作が重い状態が続くと画質を一段下げます。自動調整は上の設定で無効にできます。HDR
         ULTRAは最大4096pxの太陽影と高精細な接地影を使用します。写真の解像度は探索中の画質と別に設定でき、軽量品質でも4Kを選べます。
+      </p>
+      <p class="dialog-note">
+        LOWは解像度・テクスチャの鮮明さを従来の軽量設定から下げず、視界外や実際の壁・床で完全に隠れるパーツの描画を省きます。
+        小物75m・植栽185m・屋上135m・外壁装飾300mを基準に距離別表示（境界に18mの余裕）。建物本体や遠景は残し、写真撮影は専用の可視判定で描画します。
       </p>
       <p id="fullscreen-status" role="status"></p>
       <nav class="story-tools" aria-label="街歩きの道具">
@@ -565,15 +569,16 @@
       <button class="primary-button close-dialog">住戸の探索に戻る</button>
     </dialog>
     <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
-    <script src="js/traffic.js?v=20260920.2"></script>
-    <script src="js/interactions.js?v=20260920.2"></script>
-    <script src="js/residences.js?v=20260920.2"></script>
-    <script src="js/lighting.js?v=20260920.2"></script>
-    <script src="js/environment.js?v=20260920.2"></script>
-    <script src="js/exterior.js?v=20260920.2"></script>
-    <script src="js/audio.js?v=20260920.2"></script>
-    <script src="js/photography.js?v=20260920.2"></script>
-    <script src="js/stories.js?v=20260920.2"></script>
-    <script src="js/game.js?v=20260920.2"></script>
+    <script src="js/traffic.js?v=20260920.3"></script>
+    <script src="js/interactions.js?v=20260920.3"></script>
+    <script src="js/residences.js?v=20260920.3"></script>
+    <script src="js/lighting.js?v=20260920.3"></script>
+    <script src="js/environment.js?v=20260920.3"></script>
+    <script src="js/visibility.js?v=20260920.3"></script>
+    <script src="js/exterior.js?v=20260920.3"></script>
+    <script src="js/audio.js?v=20260920.3"></script>
+    <script src="js/photography.js?v=20260920.3"></script>
+    <script src="js/stories.js?v=20260920.3"></script>
+    <script src="js/game.js?v=20260920.3"></script>
   </body>
 </html>
