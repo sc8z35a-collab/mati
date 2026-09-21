@@ -515,7 +515,7 @@ window.EvercityHDR = class EvercityHDR {
     const { T, renderer } = this;
     renderer.getDrawingBufferSize(this.size);
     // Only legacy presets have a pixel budget. Offline capture uses 8x jittered SSAA instead of redundant MSAA.
-    const budget = this.captureActive ? Infinity : 4200000;
+    const budget = this.captureActive ? Infinity : (renderer.evercityPixelBudget || 4200000);
     const scale = Math.min(1, Math.sqrt(budget / (this.size.x * this.size.y)));
     const w = Math.max(1, Math.floor(this.size.x * scale)),
       h = Math.max(1, Math.floor(this.size.y * scale));
