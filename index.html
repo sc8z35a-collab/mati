@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"
     />
-    <meta name="evercity-release" content="20260920.3" />
+    <meta name="evercity-release" content="20260921.3" />
     <meta name="theme-color" content="#101d23" />
     <link
       rel="icon"
@@ -19,9 +19,9 @@
       href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/style.css?v=20260920.3" />
-    <link rel="stylesheet" href="css/living-city.css?v=20260920.3" />
-    <link rel="stylesheet" href="css/stories.css?v=20260920.3" />
+    <link rel="stylesheet" href="css/style.css?v=20260921.3" />
+    <link rel="stylesheet" href="css/living-city.css?v=20260921.3" />
+    <link rel="stylesheet" href="css/stories.css?v=20260921.3" />
   </head>
   <body class="immersive">
     <main id="game" aria-label="3D都市探索ゲーム">
@@ -30,6 +30,26 @@
         aria-label="3D都市。WASDまたは画面左のスティックで移動します"
       ></canvas>
       <div class="vignette"></div>
+      <button id="service-button" class="service-launch" aria-expanded="false" aria-controls="service-panel">
+        <span class="service-live"></span> 公共安全地区 <small>4 BASES</small>
+      </button>
+      <section id="service-panel" class="service-panel" aria-label="公共安全地区の操作" hidden>
+        <div class="service-heading"><span>EVERCITY / PUBLIC SAFETY</span><button id="service-close" aria-label="拠点パネルを閉じる">×</button></div>
+        <div class="service-tabs" aria-label="拠点を選ぶ">
+          <button data-service="0" aria-pressed="true">警察</button><button data-service="1" aria-pressed="false">救急</button><button data-service="2" aria-pressed="false">消防</button><button data-service="3" aria-pressed="false">自衛隊</button>
+        </div>
+        <span id="service-tag" class="service-tag">POLICE 01</span>
+        <h2 id="service-name">中央警察署</h2>
+        <p id="service-title" class="service-title">街の平穏を、守る。</p>
+        <p id="service-info" class="service-info"></p>
+        <div class="service-stats"><span><b>04</b> 拠点</span><span><b>13</b> 車両・航空機</span><span><b>28</b> 隊員</span></div>
+        <div class="service-status"><span class="service-live"></span><span id="service-status" role="status">待機中 / READY</span></div>
+        <div class="service-track"><i id="service-progress"></i></div>
+        <button id="service-dispatch" class="service-primary">出動デモを開始 →</button>
+        <div class="service-actions"><button id="service-visit">拠点へ移動</button><button id="service-overview">俯瞰で眺める</button></div>
+        <div class="service-actions service-secondary"><button id="service-pause" aria-pressed="false">演出を一時停止</button><button id="service-sound" aria-pressed="false">サイレン OFF</button></div>
+        <p class="service-note">28秒の敷地内訓練。街の交通とは独立した演出です。俯瞰はEscでも解除できます。</p>
+      </section>
       <nav class="immersive-actions" aria-label="操作メニュー">
         <button
           id="menu-button"
@@ -257,7 +277,8 @@
         左側を触れて移動、右側をスワイプして見回す。<br />PC：WASDで移動、ドラッグで視点を操作。
       </p>
       <div class="menu-grid">
-        <button data-menu-action="map-button">都市マップ</button
+        <button data-menu-action="service-button">公共安全地区・4拠点</button
+        ><button data-menu-action="map-button">都市マップ</button
         ><button data-menu-action="residence-panel">住戸の設備</button
         ><button data-menu-action="journal-button">街歩き手帳</button
         ><button data-menu-action="camera-button">写真を撮る</button
@@ -345,6 +366,27 @@
           <option value="balanced">LOW / 軽量・鮮明</option>
         </select></label
       >
+      <label class="setting-row" for="actor-style">
+        車・人・NPCの描画<select id="actor-style" aria-describedby="actor-help">
+          <option value="standard">通常</option>
+          <option value="voxel">ボクセル / 高精細</option>
+          <option value="voxel-ultra">ボクセル / 超高精細</option>
+        </select>
+      </label>
+      <label class="setting-row" for="render-resolution">
+        探索中の描画解像度<select id="render-resolution" aria-describedby="actor-help">
+          <option value="auto">画質設定に合わせる</option>
+          <option value="ultra">超高解像度 / 最大4K</option>
+        </select>
+      </label>
+      <p id="actor-status" class="dialog-note" role="status"></p>
+      <p id="actor-help" class="dialog-note">
+        ボクセル超高精細は人物を最小2cm、車を最小4cmの立体セルで表現。顔・髪・衣服・ホイールまで描き込みます。
+        遠くのモデルはボクセル形状を保ちながら簡略化し、撮影時は高精細範囲を広げます。
+        超高解像度は長辺最大3840px・最大829万画素で実描画します（端末のGPU上限によって制限）。
+        高負荷のため、重い場合は解像度を「画質設定に合わせる」に戻してください。
+        この2設定は端末に保存され、自動画質調整では変更しません。写真の出力解像度は撮影設定で選べます。
+      </p>
       <p id="detail-status" class="dialog-note" aria-live="polite">
         外観のディテールを構築中
       </p>
@@ -569,16 +611,18 @@
       <button class="primary-button close-dialog">住戸の探索に戻る</button>
     </dialog>
     <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
-    <script src="js/traffic.js?v=20260920.3"></script>
-    <script src="js/interactions.js?v=20260920.3"></script>
-    <script src="js/residences.js?v=20260920.3"></script>
-    <script src="js/lighting.js?v=20260920.3"></script>
-    <script src="js/environment.js?v=20260920.3"></script>
-    <script src="js/visibility.js?v=20260920.3"></script>
-    <script src="js/exterior.js?v=20260920.3"></script>
-    <script src="js/audio.js?v=20260920.3"></script>
-    <script src="js/photography.js?v=20260920.3"></script>
-    <script src="js/stories.js?v=20260920.3"></script>
-    <script src="js/game.js?v=20260920.3"></script>
+    <script src="js/actors.js?v=20260921.3"></script>
+    <script src="js/traffic.js?v=20260921.3"></script>
+    <script src="js/interactions.js?v=20260921.3"></script>
+    <script src="js/residences.js?v=20260921.3"></script>
+    <script src="js/lighting.js?v=20260921.3"></script>
+    <script src="js/environment.js?v=20260921.3"></script>
+    <script src="js/visibility.js?v=20260921.3"></script>
+    <script src="js/exterior.js?v=20260921.3"></script>
+    <script src="js/audio.js?v=20260921.3"></script>
+    <script src="js/photography.js?v=20260921.3"></script>
+    <script src="js/stories.js?v=20260921.3"></script>
+    <script src="js/services.js?v=20260921.3"></script>
+    <script src="js/game.js?v=20260921.3"></script>
   </body>
 </html>

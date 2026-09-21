@@ -1065,7 +1065,8 @@ window.EvercityStories = class EvercityStories {
     const p = this.a.player;
     if (
       Math.abs(saved.x) <= 329 &&
-      Math.abs(saved.z) <= 330 &&
+      saved.z >= -330 && saved.z <= 451 &&
+      (saved.z <= 330 || Math.abs(saved.x) <= 159) &&
       !this.a.blocked(saved.x, saved.z)
     ) {
       p.x = saved.x;

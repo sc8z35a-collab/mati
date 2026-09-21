@@ -3,6 +3,10 @@
 window.EvercityExterior = class EvercityExterior {
   constructor({ THREE: T, scene, renderer, materials, obstacle, sun }) {
     Object.assign(this, { T, scene, renderer, materials, obstacle, sun });
+    this.resolution = "auto";
+    try {
+      if (localStorage.getItem("evercity-resolution-v1") === "ultra") this.resolution = "ultra";
+    } catch (_) {}
     this.seed = 482731;
     this.batches = new Map();
     this.roughnessMaps = new WeakMap();
@@ -3058,20 +3062,33 @@ window.EvercityExterior = class EvercityExterior {
     this.setQuality(this.quality);
     console.info("EVERCITY exterior", JSON.stringify(this.snapshot()));
   }
+  setResolution(value) {
+    this.resolution = value === "ultra" ? "ultra" : "auto";
+    try { localStorage.setItem("evercity-resolution-v1", this.resolution); } catch (_) {}
+    this.applyResolution();
+  }
+  applyResolution() {
+    const width = Math.max(1, innerWidth), height = Math.max(1, innerHeight);
+    const ultra = this.resolution === "ultra";
+    const budget = ultra ? 8294400 : 4200000;
+    const ratio = ultra ? 3840 / Math.max(width, height) : Math.min(
+      devicePixelRatio,
+      { balanced: 1, high: 1.5, ultra: 2, "hdr-ultra": 2 }[this.quality],
+    );
+    // Actual scene pixels, including the HDR target; never CSS/image upscaling.
+    this.renderer.evercityPixelBudget = budget;
+    this.renderer.setPixelRatio(Math.min(
+      ratio,
+      Math.sqrt(budget / (width * height)),
+      this.renderer.capabilities.maxTextureSize / width,
+      this.renderer.capabilities.maxTextureSize / height,
+    ));
+  }
   setQuality(value, { persist = true } = {}) {
     this.quality = ["balanced", "high", "ultra", "hdr-ultra"].includes(value)
       ? value
       : "high";
-    const ratio = { balanced: 1, high: 1.5, ultra: 2, "hdr-ultra": 2 }[
-      this.quality
-    ];
-    this.renderer.setPixelRatio(
-      Math.min(
-        devicePixelRatio,
-        ratio,
-        Math.sqrt(4200000 / (innerWidth * innerHeight)),
-      ),
-    );
+    this.applyResolution();
     // Quality controls shadows as well as pixels and detail distance.
     const size = Math.min(
       this.renderer.capabilities.maxTextureSize,

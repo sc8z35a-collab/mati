@@ -520,3 +520,39 @@
     max-height: 90dvh;
   }
 }
+
+/* Public-safety district controls: isolated from the existing immersive HUD. */
+.service-launch { position: absolute; z-index: 12; top: max(22px, env(safe-area-inset-top)); left: 22px; display: flex; align-items: center; gap: 10px; padding: 13px 17px; min-height: 46px; color: #e9eee8; background: #13282eeb; border: 1px solid #89b5b34d; border-radius: 5px; font: 500 12px "Noto Sans JP", sans-serif; cursor: pointer; backdrop-filter: blur(16px); }
+.service-launch small { color: #8eaaa9; font: 12px "Barlow Condensed", sans-serif; letter-spacing: 1.8px; border-left: 1px solid #6d8d8b55; padding-left: 12px; }
+.service-live { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #a2e2dd; box-shadow: 0 0 12px #a2e2dd66; flex-shrink: 0; }
+.service-panel { --service-accent: #81b8e9; position: absolute; z-index: 13; top: max(82px, calc(env(safe-area-inset-top) + 60px)); left: 22px; width: 306px; max-height: calc(100dvh - 104px); overflow-y: auto; padding: 20px; color: #e8ece5; background: linear-gradient(145deg, #142c32f5, #101e25f5); border: 1px solid #91b7ad40; border-radius: 7px; box-shadow: 0 14px 60px #0004; backdrop-filter: blur(20px); font-family: "Noto Sans JP", sans-serif; }
+.service-panel[hidden] { display: none; }
+.service-heading { display: flex; align-items: center; justify-content: space-between; color: #8ea6a8; letter-spacing: 1.5px; font: 12px "Barlow Condensed", sans-serif; }
+.service-heading button { background: transparent; border: 0; color: #dce3db; font-size: 23px; width: 32px; height: 32px; cursor: pointer; }
+.service-tabs { display: grid; grid-template-columns: repeat(4, 1fr); margin: 14px 0 24px; border-bottom: 1px solid #829c9633; }
+.service-tabs button { padding: 11px 0; border: 0; border-bottom: 2px solid transparent; color: #8fa6a6; background: transparent; cursor: pointer; font: 12px "Noto Sans JP", sans-serif; }
+.service-tabs button[aria-pressed="true"] { color: var(--service-accent); border-bottom-color: var(--service-accent); background: #ffffff04; }
+.service-tag { color: var(--service-accent); font: 12px "Barlow Condensed", sans-serif; letter-spacing: 2.5px; }
+.service-panel h2 { font-size: 21px; font-weight: 500; margin: 9px 0; letter-spacing: 0.02em; }
+.service-title { font-size: 12px; color: #d0d9d2; margin: 0 0 13px; }
+.service-info { font-size: 10px; color: #94aaa8; line-height: 1.9; min-height: 38px; }
+.service-stats { display: flex; justify-content: space-between; border-top: 1px solid #829c9633; border-bottom: 1px solid #829c9633; padding: 14px 0; margin: 17px 0; }
+.service-stats span { color: #8fa6a3; font-size: 9px; }
+.service-stats b { display: block; color: #d7e4dd; font: 29px "Barlow Condensed", sans-serif; margin-bottom: 4px; }
+.service-status { display: flex; gap: 8px; align-items: center; color: var(--service-accent); font-size: 10px; letter-spacing: 0.5px; }
+.service-track { height: 2px; background: #89ada522; margin: 12px 0 17px; }
+.service-track i { display: block; height: 100%; width: 0; background: var(--service-accent); }
+.service-primary { width: 100%; min-height: 44px; background: var(--service-accent); border: 0; border-radius: 3px; color: #102b30; font: 600 12px "Noto Sans JP", sans-serif; cursor: pointer; }
+.service-primary:disabled { opacity: 0.55; cursor: default; }
+.service-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.service-actions button { min-height: 40px; background: #d0e9db08; border: 1px solid #9dbaac30; border-radius: 3px; color: #d3ded9; font: 11px "Noto Sans JP", sans-serif; cursor: pointer; }
+.service-secondary button { border: 0; background: transparent; color: #9eb5b0; font-size: 10px; }
+.service-note { margin: 13px 0 0; font-size: 9px; color: #7c9694; line-height: 1.8; }
+.service-panel button:focus-visible, .service-launch:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+#game.photo-mode .service-panel, #game.photo-mode .service-launch { display: none; }
+@media (max-width: 600px) {
+  .service-launch { top: max(16px, env(safe-area-inset-top)); left: 12px; padding: 10px 12px; gap: 8px; }
+  .service-panel { top: 73px; left: 12px; width: min(288px, calc(100vw - 24px)); max-height: calc(100dvh - 150px); padding: 16px; }
+  .service-tabs { margin-bottom: 15px; }
+  .service-stats { padding: 10px 0; margin: 12px 0; }
+}

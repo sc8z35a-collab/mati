@@ -232,7 +232,9 @@
     people = [];
   const landmarks = [],
     streetFixtures = [];
-  let trafficSystem = null,
+  let services = null,
+    actorAppearance = null,
+    trafficSystem = null,
     lightingSystem = null,
     stories = null,
     environment = null,
@@ -2073,7 +2075,8 @@
     atFloor = player.floor,
     inBuilding = player.building,
   ) {
-    if (Math.abs(x) > 329 || Math.abs(z) > 330) return true;
+    if (Math.abs(x) > 329 || z < -330 || z > 451 || (z > 330 && Math.abs(x) > 159)) return true;
+    if (services?.blocked(x, z)) return true;
     const radius = 0.32;
     const feet = dynamic ? player.jump : 0;
     const intersects = (ob) =>
@@ -2171,6 +2174,7 @@
         )
           ground = 0.33;
     }
+    if (!b && player.z > 350) ground = -0.04;
     const solids = b ? b.solids[player.floor] || [] : obstacles;
     for (const ob of solids) {
       if (
@@ -2521,6 +2525,11 @@
     environment?.apply();
   }
   function teleport(b) {
+    if (services) {
+      services.overview = false;
+      if (b.service) services.selected = services.sites.indexOf(b);
+      services.renderUI();
+    }
     clearActiveInterior();
     player.floor = 0;
     player.building = null;
@@ -2682,9 +2691,9 @@
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = "#12292e";
     ctx.fillRect(0, 0, w, h);
-    const scale = full ? Math.min((w - 30) / 670, (h - 25) / 670) : 0.98;
+    const scale = full ? Math.min((w - 30) / 670, (h - 25) / 810) : 0.98;
     const cx = full ? 0 : player.x,
-      cz = full ? 0 : player.z;
+      cz = full ? 57 : player.z;
     const px = (x) => w / 2 + (x - cx) * scale,
       pz = (z) => h / 2 + (z - cz) * scale;
     ctx.strokeStyle = "#385052";
@@ -2739,6 +2748,7 @@
       ctx.lineTo(px(p.x), pz(p.z + 23));
       ctx.stroke();
     }
+    services?.drawMap(ctx, px, pz, scale);
     stories?.drawGoal(ctx, px, pz);
     const x = px(player.x),
       y = pz(player.z);
@@ -2836,6 +2846,7 @@
       mesh.visible = false;
     });
     try {
+      actorAppearance?.update(camera.position, true);
       visibility.restore(); // Tile cameras and photo FOV must see the full scene.
       hdr.release();
       exterior.setQuality(photoQuality, { persist: false });
@@ -2861,6 +2872,7 @@
         mesh.visible = visible;
       });
       try {
+        actorAppearance?.update(camera.position);
         exterior.setQuality(quality, { persist: false });
         lightingSystem.setQuality(quality);
         hdr.setQuality(quality);
@@ -2898,6 +2910,7 @@
         lightingSystem.setQuality(next);
         hdr.setQuality(next);
         $("quality-select").value = next;
+        updateActorStatus();
         toast(
           "動作を安定させるため画質を " +
             next.toUpperCase() +
@@ -2921,7 +2934,7 @@
     frameTimes.push(wallMilliseconds);
     if (frameTimes.length > 600) frameTimes.shift();
     adaptiveQuality(dt);
-    if (started && !dialogOpen()) {
+    if (started && !dialogOpen() && !services?.overview) {
       let forward =
         (keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0) -
         (keys.has("KeyS") || keys.has("ArrowDown") ? 1 : 0) -
@@ -2977,6 +2990,12 @@
     hdr.exposureMultiplier = stories?.photoMode
       ? 2 ** EvercityPhotography.options().exposure
       : 1;
+    // Photography uses the walk camera and its composition controls.
+    if (stories?.photoMode && services?.overview) {
+      services.overview = false;
+      services.renderUI();
+    }
+    services?.update(dt, player, camera, dialogOpen());
     sky.position.copy(camera.position);
     if (!dialogOpen()) {
       trafficSystem?.update(dt);
@@ -2995,6 +3014,7 @@
       distance: traveled,
       paused: dialogOpen(),
     });
+    actorAppearance?.update(camera.position);
     lightingSystem?.update(dt, currentBuilding, timeMode, environment?.weather);
     skyUniforms.sunDirection.value
       .copy(sun.position)
@@ -3014,14 +3034,22 @@
     visibility.prepare(camera, exterior?.quality === "balanced");
     hdr.render(scene, timeMode);
   }
+  function updateActorStatus() {
+    if (!exterior || !actorAppearance) return;
+    const size = renderer.getDrawingBufferSize(new T.Vector2());
+    $("actor-status").textContent =
+      `車40台・歩行者95人・会話NPC6人 / ${$("actor-style").selectedOptions[0].textContent} / 実描画 ${size.x} × ${size.y}px`;
+  }
   function resizeWorld() {
     if (captureBusy) return;
     resetJoystick();
     pointer.drag = false;
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
+    exterior?.applyResolution();
     renderer.setSize(innerWidth, innerHeight);
     hdr.resize();
+    updateActorStatus();
   }
   addEventListener("resize", resizeWorld);
   window.visualViewport?.addEventListener("resize", resizeWorld);
@@ -3037,6 +3065,8 @@
   $("recover-button").onclick = () => {
     try {
       localStorage.setItem("evercity-quality-v1", "balanced");
+      localStorage.setItem("evercity-resolution-v1", "auto");
+      localStorage.setItem("evercity-actors-v1", "standard");
     } catch (e) {}
     location.reload();
   };
@@ -3294,7 +3324,8 @@
   }
   // A read-only diagnostics hook enables reproducible in-browser validation.
   window.evercity = {
-    release: "20260920.3",
+    release: "20260921.3",
+    serviceSnapshot: () => services?.snapshot(),
     objectSnapshot,
     objectTest: objectSelfTest,
     visualSelfTest,
@@ -3321,6 +3352,8 @@
         .filter((b) => b.type === "residential")
         .reduce((n, b) => n + (b.floors - 1) * 2, 0),
       traffic: trafficSystem?.snapshot(),
+      actors: actorAppearance?.snapshot(),
+      resolution: exterior?.resolution,
       lighting: lightingSystem?.snapshot(),
       hdr: hdr.snapshot(),
       story: stories?.data.active,
@@ -3347,7 +3380,7 @@
         sideWallSolid: blocked(b.x + b.w / 2, b.z),
         backWallSolid: blocked(b.x, b.z - b.d / 2),
         elevatorCoreSolid: blocked(b.x, b.z - b.d / 2 + 3),
-        mapDestinations: landmarks.length === 9,
+        mapDestinations: landmarks.length === 13,
         groundInteriors: scene.children.some((c) => c.isInstancedMesh),
       };
       player.floor = 1;
@@ -3421,6 +3454,8 @@
       use: (id) =>
         interactions.use(interactions.items.find((item) => item.id === id)),
       step: (dt) => interactions.update(dt),
+      services: () => services,
+      serviceStep: (dt) => services.update(dt, player, camera),
       resources: () => ({
         geometries: renderer.info.memory.geometries,
         textures: renderer.info.memory.textures,
@@ -3446,6 +3481,8 @@
         sun,
       });
       createCity();
+      services = new EvercityServices({ THREE: T, scene, obstacle, teleport, toast, renderer });
+      landmarks.push(...services.sites);
       for (const b of buildings)
         buildingGrid.set(Math.round(b.x / 72) + ":" + Math.round(b.z / 72), b);
       buildings.forEach((b) => exterior.building(b));
@@ -3482,6 +3519,7 @@
         hdr.setQuality(exterior.quality);
         exterior.update(1, player, timeMode);
         updateDetailStatus();
+        updateActorStatus();
       };
       flushBatches();
       traffic();
@@ -3552,6 +3590,28 @@
         getTime: () => timeMode,
         environment: () => environment,
       });
+      actorAppearance = new EvercityActors({
+        THREE: T,
+        vehicles,
+        people,
+        npcs: stories.npcs,
+      });
+      $("actor-style").value = actorAppearance.mode;
+      $("render-resolution").value = exterior.resolution;
+      $("actor-style").onchange = (e) => {
+        if (captureBusy) return;
+        actorAppearance.setMode(e.target.value);
+        actorAppearance.update(camera.position);
+        renderer.shadowMap.needsUpdate = true;
+        updateActorStatus();
+      };
+      $("render-resolution").onchange = (e) => {
+        if (captureBusy) return;
+        exterior.setResolution(e.target.value);
+        hdr.resize();
+        updateActorStatus();
+      };
+      updateActorStatus();
       camera.position.set(player.x, player.y, player.z);
       camera.rotation.set(player.pitch, player.yaw, 0);
       const launchParams = new URLSearchParams(location.search);
@@ -3607,7 +3667,7 @@
       if (params.has("floor") && params.get("spot")) {
         const b = landmarks.find(
           (v) =>
-            !v.park &&
+            !v.park && !v.service &&
             v.name.toLowerCase().includes(params.get("spot").toLowerCase()),
         );
         if (b) {
@@ -3628,6 +3688,8 @@
             visitApartment(b, player.floor, true);
         }
       }
+      const serviceIndex = services.sites.findIndex(s => s.id === params.get("spot"));
+      if (serviceIndex >= 0) services.visit(serviceIndex, params.get("overview") === "1");
       if (params.get("weather")) environment.setWeather(params.get("weather"));
       if (params.get("camera") === "1") stories.toggleCamera(true);
       if (params.get("journal") === "1") stories.openJournal();
