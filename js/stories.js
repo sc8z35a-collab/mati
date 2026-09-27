@@ -275,6 +275,9 @@ window.EvercityStories = class EvercityStories {
       this.data.progress[m.id] = Number.isInteger(v)
         ? Math.max(0, Math.min(m.steps.length, v))
         : 0;
+      // A rewarded mission is complete; keep the journal and reward state consistent.
+      if (this.data.claimed.includes(m.id))
+        this.data.progress[m.id] = m.steps.length;
     }
     if (!this.missions.some((m) => m.id === this.data.active))
       this.data.active = "garden";
@@ -283,7 +286,7 @@ window.EvercityStories = class EvercityStories {
       : [];
     this.coffeeUntil = Math.max(
       0,
-      Math.min(180, Number(this.data.coffeeRemaining) || 0),
+      Math.min(360, Number(this.data.coffeeRemaining) || 0),
     );
     this.createResidents();
     this.createBeacon();
@@ -318,9 +321,18 @@ window.EvercityStories = class EvercityStories {
         ...EvercityStories.blank(),
         ...raw,
         progress:
-          raw.progress && typeof raw.progress === "object" ? raw.progress : {},
+          raw.progress &&
+          typeof raw.progress === "object" &&
+          !Array.isArray(raw.progress)
+            ? raw.progress
+            : {},
+        position:
+          raw.position && typeof raw.position === "object"
+            ? raw.position
+            : null,
+        active: typeof raw.active === "string" ? raw.active : "garden",
         claimed: Array.isArray(raw.claimed)
-          ? raw.claimed.filter((s) => typeof s === "string")
+          ? [...new Set(raw.claimed.filter((s) => typeof s === "string"))]
           : [],
         credits: Math.max(
           0,
@@ -399,7 +411,8 @@ window.EvercityStories = class EvercityStories {
       this.data.claimed.push(m.id);
       this.data.credits += m.reward;
       this.a.toast(`STORY COMPLETE / ${m.title}　＋${m.reward} EC`);
-    } else this.a.toast("NEXT / " + this.step().text);
+    } else if (this.step()) this.a.toast("NEXT / " + this.step().text);
+    else this.a.toast(`STORY COMPLETE / ${m.title}`);
     this.save();
     this.renderHUD();
     return true;
@@ -480,9 +493,16 @@ window.EvercityStories = class EvercityStories {
   near() {
     const p = this.a.player;
     if (p.floor === 0) {
-      const npc = this.people.find(
-        (n) => Math.hypot(n.x - p.x, n.z - p.z) < 3.4,
-      );
+      // Pick the closest resident, not the first one in list order (Hana and Sora stand close).
+      let npc = null,
+        best = 3.4;
+      for (const n of this.people) {
+        const d = Math.hypot(n.x - p.x, n.z - p.z);
+        if (d < best) {
+          best = d;
+          npc = n;
+        }
+      }
       if (npc) return { kind: "npc", npc, label: npc.name + "と話す" };
     }
     const s = this.step();
@@ -524,14 +544,17 @@ window.EvercityStories = class EvercityStories {
       actions.append(b);
     };
     if (s?.type === "talk" && s.npc === npc.id) {
-      const m = this.active();
+      const m = this.active(),
+        finalStep = this.data.progress[m.id] === m.steps.length - 1;
       $("resident-words").textContent =
         this.data.progress[m.id] > 0
           ? "見せてくれてありがとう。この街を、少し好きになってくれたなら嬉しいです。"
           : npc.hello;
       button(
         this.data.progress[m.id] > 0
-          ? "報告して報酬を受け取る"
+          ? finalStep
+            ? "報告して報酬を受け取る"
+            : "報告して依頼を進める"
           : npc.id === "ren"
             ? "コーヒー豆の荷物を受け取る"
             : "話を聞いて依頼を進める",
@@ -552,8 +575,13 @@ window.EvercityStories = class EvercityStories {
           return;
         }
         this.data.credits -= 30;
-        this.coffeeUntil = this.time + 180;
+        // Buying again extends the current boost instead of silently discarding it.
+        this.coffeeUntil = Math.min(
+          this.time + 360,
+          Math.max(this.coffeeUntil || 0, this.time) + 180,
+        );
         this.save();
+        this.renderHUD();
         this.a.toast("コーヒーで一息。3分間、徒歩の速度が少し上がります。");
         $("resident-dialog").close();
       });
@@ -571,6 +599,7 @@ window.EvercityStories = class EvercityStories {
           this.data.credits -= cost;
           this.data.purchases.push(id);
           this.save();
+          this.renderHUD();
           this.a.toast(title + "を購入しました");
           $("resident-dialog").close();
         });
@@ -661,10 +690,14 @@ window.EvercityStories = class EvercityStories {
       $("destination-distance").textContent = "すべての場所に、新しい発見を。";
       this.beacon.visible = false;
     }
-    if (this.photoMode)
+    // The framing test raycasts the whole city; refresh the hint at most ~2x/second.
+    if (this.photoMode && this.time - (this.lastFramingCheck ?? -1) >= 0.5) {
+      this.lastFramingCheck = this.time;
+      this.a.camera.updateMatrixWorld(true);
       $("photo-hint").textContent = this.canPhotograph()
         ? "✓ 依頼の被写体を捉えています"
         : "自由に撮影 / 依頼の被写体を中央に入れてください";
+    }
   }
   canPhotograph() {
     const s = this.step();
@@ -687,9 +720,15 @@ window.EvercityStories = class EvercityStories {
   }
   toggleCamera(force) {
     if (this.busy) return;
-    this.photoMode = force === undefined ? !this.photoMode : !!force;
+    const next = force === undefined ? !this.photoMode : !!force;
+    // Re-entering photo mode must not overwrite the saved walking lens with the photo lens.
+    if (next === this.photoMode) return;
+    this.photoMode = next;
+    this.lastFramingCheck = -Infinity; // show a fresh framing hint immediately
     if (this.photoMode) {
       this.a.closeDialogs();
+      // The shutter, lens and album controls need a visible cursor.
+      if (document.pointerLockElement) document.exitPointerLock();
       document.getElementById("photo-options").hidden = true;
       document
         .getElementById("photo-options-toggle")
@@ -720,6 +759,8 @@ window.EvercityStories = class EvercityStories {
           const db = r.result;
           if (!db.objectStoreNames.contains("photos"))
             db.createObjectStore("photos", { keyPath: "id" });
+          // Re-running the upgrade (future versions, interrupted migrations) must not throw.
+          if (db.objectStoreNames.contains("previews")) return;
           const previews = db.createObjectStore("previews", { keyPath: "id" });
           // Migrate metadata without decoding or loading all original images into memory.
           const cursor = r.transaction.objectStore("photos").openCursor();
@@ -784,13 +825,18 @@ window.EvercityStories = class EvercityStories {
     const session = this.sessionPhotos.map(({ blob, ...metadata }) => metadata);
     if (!this.db) return session;
     return new Promise((resolve) => {
-      const r = this.db
-        .transaction("previews")
-        .objectStore("previews")
-        .getAll();
-      r.onsuccess = () =>
-        resolve([...r.result, ...session].sort((a, b) => b.time - a.time));
-      r.onerror = () => resolve(session);
+      try {
+        const r = this.db
+          .transaction("previews")
+          .objectStore("previews")
+          .getAll();
+        r.onsuccess = () =>
+          resolve([...r.result, ...session].sort((a, b) => b.time - a.time));
+        r.onerror = () => resolve(session);
+      } catch (e) {
+        // The database may have been closed by another tab's version change.
+        resolve(session);
+      }
     });
   }
   async photo(id) {
@@ -798,7 +844,13 @@ window.EvercityStories = class EvercityStories {
     if (cached) return cached;
     if (!this.db) throw Error("写真を読み込めません。");
     return new Promise((resolve, reject) => {
-      const r = this.db.transaction("photos").objectStore("photos").get(id);
+      let r;
+      try {
+        r = this.db.transaction("photos").objectStore("photos").get(id);
+      } catch (e) {
+        reject(Error("写真を読み込めません。ページを再読み込みしてください。"));
+        return;
+      }
       r.onsuccess = () =>
         r.result ? resolve(r.result) : reject(Error("写真が見つかりません。"));
       r.onerror = () => reject(r.error);
@@ -928,7 +980,7 @@ window.EvercityStories = class EvercityStories {
   }
   // Originals are deleted only by an explicit album action.
   async deletePhoto(id) {
-    if (this.db)
+    if (this.db && !this.sessionPhotos.some((p) => p.id === id))
       await new Promise((resolve, reject) => {
         const tx = this.db.transaction(["photos", "previews"], "readwrite");
         tx.objectStore("photos").delete(id);
@@ -940,6 +992,8 @@ window.EvercityStories = class EvercityStories {
     this.sessionPhotos = this.sessionPhotos.filter((p) => p.id !== id);
   }
   async openAlbum() {
+    // Rapid re-opens (delete, back button) must not interleave two listings.
+    const token = (this.albumToken = (this.albumToken || 0) + 1);
     this.a.openDialog("album-dialog");
     const list = document.getElementById("album-grid");
     const message = document.createElement("p");
@@ -948,7 +1002,11 @@ window.EvercityStories = class EvercityStories {
     this.photoURLs.forEach(URL.revokeObjectURL);
     this.photoURLs = [];
     const records = await this.photos();
-    if (!document.getElementById("album-dialog").open) return;
+    if (
+      token !== this.albumToken ||
+      !document.getElementById("album-dialog").open
+    )
+      return;
     list.replaceChildren();
     if (!records.length) {
       message.textContent =
@@ -985,9 +1043,15 @@ window.EvercityStories = class EvercityStories {
               const original = await this.photo(record.id),
                 thumbnail = await EvercityPhotography.thumbnail(original.blob);
               if (!thumbnail) return;
-              if (this.db) {
-                const tx = this.db.transaction("previews", "readwrite");
-                tx.objectStore("previews").put({ ...record, thumbnail });
+              // Session-only photos are not persisted; never create phantom previews.
+              if (
+                this.db &&
+                !this.sessionPhotos.some((p) => p.id === record.id)
+              ) {
+                try {
+                  const tx = this.db.transaction("previews", "readwrite");
+                  tx.objectStore("previews").put({ ...record, thumbnail });
+                } catch (e) {}
               }
               if (
                 img.isConnected &&
@@ -1052,7 +1116,8 @@ window.EvercityStories = class EvercityStories {
     }
     const b = this.a.buildings.find((b) => b.id === saved.bid);
     if (saved.floor > 0 && !b) {
-      this.a.toast("保存した建物が見つかりません");
+      this.a.teleport({ park: true, x: 0, z: 72, jp: "セントラル・ガーデン" });
+      this.a.toast("保存した建物が見つからないため、公園から再開しました");
       return;
     }
     if (saved.floor > 0)
@@ -1116,6 +1181,16 @@ window.EvercityStories = class EvercityStories {
     };
     addEventListener("keydown", (e) => {
       if (this.busy || this.a.dialogOpen() || e.repeat) return;
+      // Ctrl+P prints, Cmd+J opens downloads: never treat shortcuts as game keys.
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target;
+      // A focused control already activates on Enter; do not also fire the shutter.
+      if (
+        t instanceof HTMLElement &&
+        (["INPUT", "SELECT", "TEXTAREA"].includes(t.tagName) ||
+          (e.code === "Enter" && ["BUTTON", "A"].includes(t.tagName)))
+      )
+        return;
       if (e.code === "KeyJ") this.openJournal();
       if (e.code === "KeyP") this.toggleCamera();
       if (e.code === "Enter" && this.photoMode) {

@@ -331,8 +331,17 @@ window.EvercityLighting = class EvercityLighting {
               ((b.x - p.x) ** 2 + (b.z - p.z) ** 2),
           )
       : [];
+    // Keep each spot on its fixture while it stays among the nearest ones; re-sorting by
+    // distance every tick otherwise swaps assignments and makes ceiling lights flicker.
+    const roomCount = this.roomLights.length,
+      nearestRoom = fixtures.slice(0, roomCount),
+      assigned = this.roomLights.map((l) =>
+        nearestRoom.includes(l.userData.fixture) ? l.userData.fixture : null,
+      ),
+      free = nearestRoom.filter((f) => !assigned.includes(f));
+    for (let i = 0; i < roomCount; i++) if (!assigned[i]) assigned[i] = free.shift();
     this.roomLights.forEach((light, i) => {
-      const f = fixtures[i];
+      const f = assigned[i];
       if (light.userData.fixture !== f) {
         light.intensity = 0;
         light.userData.fixture = f;
@@ -341,7 +350,7 @@ window.EvercityLighting = class EvercityLighting {
         ((f ? f.intensity * (night ? 2 : 1.4) : 0) - light.intensity) * 0.3;
       light.castShadow =
         !!f &&
-        i <
+        nearestRoom.indexOf(f) <
           (this.quality === "hdr-ultra"
             ? 6
             : this.quality === "balanced"
@@ -357,7 +366,7 @@ window.EvercityLighting = class EvercityLighting {
     if (indoor)
       this.bounce.position.set(
         building.x,
-        p.floor * 5.6 + 3.3,
+        0.32 + p.floor * 5.6 + 3.3,
         building.z + building.d * 0.26,
       );
     this.fill.intensity = night ? 0.025 : golden ? 0.1 : 0.14;
@@ -563,9 +572,14 @@ window.EvercityHDR = class EvercityHDR {
     const exposure =
       (this.exposureMultiplier || 1) *
       (mode === "night" ? 1.35 : mode === "day" ? 1.02 : 1.12);
+    // Time-based adaptation: identical speed at 30, 60 or 144 fps.
+    const now = performance.now(),
+      dt = Math.min(0.25, Math.max(0, (now - (this.lastExposureTime || now)) / 1000));
+    this.lastExposureTime = now;
     r.toneMappingExposure = this.photoMode
       ? exposure
-      : r.toneMappingExposure + (exposure - r.toneMappingExposure) * 0.035;
+      : r.toneMappingExposure +
+        (exposure - r.toneMappingExposure) * (1 - Math.exp(-dt * 2.1));
     if (!this.enabled) {
       r.render(scene, this.camera);
       return;

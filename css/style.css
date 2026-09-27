@@ -1196,7 +1196,7 @@ input {
     grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
   }
 }
-.immersive #game.photo-mode .immersive-actions {
+.immersive.photo-mode .immersive-actions {
   display: none;
 }
 

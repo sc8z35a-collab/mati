@@ -78,6 +78,27 @@ assert(
   Math.abs(a.time - b.time) < 1 / 60 + 0.00001,
   "low frame rates preserve simulation time",
 );
+{
+  // A turning car blocked by the player must not hold its junction reservation forever.
+  const p0 = { x: 900, z: 900, floor: 0 };
+  const v = { axis: 0, dir: 1, lane: 39.9, pos: 24, speed: 0 };
+  const s = new Traffic({ vehicles: [v], people: [], player: p0 });
+  const c = s.intersections.find((c) => c.x === 36 && c.z === 36);
+  c.offset = 0;
+  s.time = 1;
+  v.routeCount = 1;
+  v.id = 0;
+  assert(s.beginTurn(v), "turn begins on green");
+  s.advanceTurn(v, 0.5);
+  const at = s.position(v);
+  p0.x = at.x + 0.5;
+  p0.z = at.z + 0.5;
+  for (let i = 0; i < 600; i++) s.advanceCar(v, 1 / 60);
+  assert(c.owner !== v, "held turn releases the junction reservation");
+  p0.x = p0.z = 900;
+  for (let i = 0; i < 600; i++) s.advanceCar(v, 1 / 60);
+  assert(!v.turn && !c.owner, "turn completes and clears its reservation");
+}
 console.log(
-  "PASS legacy safety, eight turns, reservations, wrap/mesh synchronization, low-FPS clock",
+  "PASS legacy safety, eight turns, reservations, wrap/mesh synchronization, low-FPS clock, blocked-turn release",
 );

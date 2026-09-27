@@ -355,8 +355,14 @@ window.EvercityTraffic = class EvercityTraffic {
       turn.yaw = oldYaw;
       v.speed = 0;
       v.braking = true;
+      // A turn held up by a blocker must not keep the whole junction reserved:
+      // release it after a short wait so cross traffic is not deadlocked.
+      turn.held = (turn.held || 0) + dt;
+      if (turn.held > 2 && turn.c.owner === v) turn.c.owner = null;
       return;
     }
+    turn.held = 0;
+    if (!turn.c.owner) turn.c.owner = v;
     const distance = Math.hypot(at.x - oldAt.x, at.z - oldAt.z);
     v.speed = distance / dt;
     v.braking = false;
@@ -502,8 +508,17 @@ window.EvercityTraffic = class EvercityTraffic {
         }
       }
     }
-    if (!p.waiting) p.blockedFor = 0;
-    else this.stats.pedestrianWaits++;
+    if (!p.waiting) {
+      p.blockedFor = 0;
+      // After a courtesy sidestep, drift back to the home lane once it is clear,
+      // instead of staying offset forever and crowding the neighbouring lane.
+      if (p.homeLane !== undefined && p.lane !== p.homeLane) {
+        const original = p.lane,
+          delta = p.homeLane - p.lane;
+        p.lane += Math.sign(delta) * Math.min(Math.abs(delta), dt * 0.5);
+        if (!this.pedestrianMoveSafe(p, p.pos)) p.lane = original;
+      }
+    } else this.stats.pedestrianWaits++;
     if (p.g) {
       const at = this.position(p);
       p.g.position.set(at.x, 0.31, at.z);

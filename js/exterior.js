@@ -3107,9 +3107,10 @@ window.EvercityExterior = class EvercityExterior {
     } catch (e) {}
     this.elapsed = 1;
   }
-  update(dt, p, mode) {
+  update(dt, p, mode, { probe = true } = {}) {
     this.reflectionClock = (this.reflectionClock || 0) + dt;
     if (
+      probe &&
       this.ready &&
       this.reflectionClock > 20 &&
       (!this.probePosition ||

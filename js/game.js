@@ -1760,6 +1760,12 @@
     );
   }
   function loadFloor(b, f) {
+    if (services?.overview) {
+      services.overview = false;
+      services.renderUI();
+    }
+    keys.clear();
+    resetJoystick();
     clearActiveInterior();
     player.floor = f;
     player.building = b;
@@ -1823,7 +1829,12 @@
         btn.setAttribute("aria-current", "true");
         btn.style.borderColor = "#82e3c9";
       }
-      btn.onclick = () => loadFloor(b, f);
+      // Choosing the current floor just closes the directory instead of
+      // snapping the player back to the elevator.
+      btn.onclick = () =>
+        f === player.floor && currentBuilding === b
+          ? $("elevator-dialog").close()
+          : loadFloor(b, f);
       $("floor-list").append(btn);
     }
     openDialog("elevator-dialog");
@@ -2207,7 +2218,12 @@
     try {
       localStorage.setItem(
         "evercity-controls-v1",
-        JSON.stringify({ sensitivity, fov: camera.fov, comfortMode }),
+        JSON.stringify({
+          sensitivity,
+          // Photo mode temporarily changes the lens; persist the walking field of view.
+          fov: stories?.photoMode && stories.walkFov ? stories.walkFov : camera.fov,
+          comfortMode,
+        }),
       );
     } catch (e) {}
   }
@@ -2238,7 +2254,14 @@
   function startGame(lock = false) {
     started = true;
     $("enter-button").classList.add("hidden");
-    if (lock && !isTouch && document.pointerLockElement !== $("world")) {
+    // The camera UI and scripted overview need a free cursor.
+    if (
+      lock &&
+      !isTouch &&
+      !stories?.photoMode &&
+      !services?.overview &&
+      document.pointerLockElement !== $("world")
+    ) {
       try {
         const promise = $("world").requestPointerLock();
         if (promise && promise.catch) promise.catch(() => {});
@@ -2255,6 +2278,18 @@
   };
   addEventListener("keydown", (e) => {
     if (dialogOpen()) return;
+    // Never hijack browser/OS shortcuts (Ctrl+F, Cmd+M, Alt+D...).
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // Focused HUD controls keep their native Space/Enter activation.
+    const focused = e.target;
+    if (
+      focused instanceof HTMLElement &&
+      (focused.isContentEditable ||
+        ["INPUT", "SELECT", "TEXTAREA"].includes(focused.tagName) ||
+        (["BUTTON", "A"].includes(focused.tagName) &&
+          ["Space", "Enter"].includes(e.code)))
+    )
+      return;
     if (
       [
         "KeyW",
@@ -2278,9 +2313,22 @@
     if (e.code === "KeyE") useNearby();
     if (e.code === "KeyF") toggleFullscreen();
     if (e.code === "KeyH") openResidenceGuide();
-    if (e.code === "Space" && player.velocityY === 0) player.velocityY = 4.6;
+    // Jump only from a resting support, never from the scripted overview or photo camera.
+    if (
+      e.code === "Space" &&
+      player.velocityY === 0 &&
+      !services?.overview &&
+      !stories?.photoMode
+    )
+      player.velocityY = 4.6;
   });
-  addEventListener("keyup", (e) => keys.delete(e.code));
+  addEventListener("keyup", (e) => {
+    keys.delete(e.code);
+    if (e.key === "Shift") {
+      keys.delete("ShiftLeft");
+      keys.delete("ShiftRight");
+    }
+  });
   addEventListener("blur", () => {
     keys.clear();
     joy.x = joy.y = 0;
@@ -2486,8 +2534,13 @@
     saveControls();
   };
   $("fov").oninput = (e) => {
-    camera.fov = Number(e.target.value);
-    camera.updateProjectionMatrix();
+    const fov = Number(e.target.value);
+    // While the camera is open the lens belongs to photo mode; update the FOV it restores.
+    if (stories?.photoMode) stories.walkFov = fov;
+    else {
+      camera.fov = fov;
+      camera.updateProjectionMatrix();
+    }
     saveControls();
   };
   $("time-select").onchange = (e) => setTime(e.target.value);
@@ -2530,6 +2583,8 @@
       if (b.service) services.selected = services.sites.indexOf(b);
       services.renderUI();
     }
+    keys.clear();
+    resetJoystick();
     clearActiveInterior();
     player.floor = 0;
     player.building = null;
@@ -2677,8 +2732,10 @@
       12,
     );
     ctx.fillText("N ↑", w - 24, 12);
-    $("coordinates").textContent =
-      player.floor === b.floors ? "RF" : player.floor + 1 + "F";
+    // Only the minimap owns the footer readout, not the residence-guide floor plan.
+    if (canvas.id === "minimap")
+      $("coordinates").textContent =
+        player.floor === b.floors ? "RF" : player.floor + 1 + "F";
   }
   function drawMap(canvas, full = false) {
     if (!full && currentBuilding) {
@@ -2829,6 +2886,11 @@
   let captureBusy = false;
   async function capturePhoto(photoQuality, options = {}) {
     if (captureBusy) throw Error("撮影処理中です。");
+    // Never leave captureBusy stuck (freezing the game) before the city exists.
+    if (!exterior?.ready || !stories || !lightingSystem || !environment)
+      throw Error("街の準備中です。少し待ってから撮影してください。");
+    if (renderer.getContext().isContextLost())
+      throw Error("描画が中断されています。ページを再読み込みしてください。");
     captureBusy = true;
     keys.clear();
     resetJoystick();
@@ -2852,7 +2914,8 @@
       exterior.setQuality(photoQuality, { persist: false });
       lightingSystem.setQuality(photoQuality);
       hdr.setQuality(photoQuality);
-      exterior.update(1, player, timeMode);
+      // No reflection-probe re-render (six cube faces) in the middle of a capture.
+      exterior.update(1, player, timeMode, { probe: false });
       lightingSystem.update(1, currentBuilding, timeMode, environment.weather);
       sun.shadow.needsUpdate = true;
       renderer.shadowMap.needsUpdate = true;
@@ -2877,7 +2940,7 @@
         lightingSystem.setQuality(quality);
         hdr.setQuality(quality);
         renderer.toneMappingExposure = exposure;
-        exterior.update(1, player, timeMode);
+        exterior.update(1, player, timeMode, { probe: false });
         lightingSystem.update(
           1,
           currentBuilding,
@@ -2909,6 +2972,10 @@
         exterior.setQuality(next, { persist: false });
         lightingSystem.setQuality(next);
         hdr.setQuality(next);
+        // Apply the new resolution/detail distances immediately.
+        renderer.setSize(innerWidth, innerHeight);
+        hdr.resize();
+        exterior.update(1, player, timeMode);
         $("quality-select").value = next;
         updateActorStatus();
         toast(
@@ -3042,8 +3109,8 @@
   }
   function resizeWorld() {
     if (captureBusy) return;
-    resetJoystick();
-    pointer.drag = false;
+    // Mobile browser chrome resizes the visual viewport while a thumb is on the
+    // stick; keep the active touch instead of dropping movement mid-gesture.
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
     exterior?.applyResolution();
@@ -3055,6 +3122,11 @@
   window.visualViewport?.addEventListener("resize", resizeWorld);
   world.addEventListener("webglcontextlost", (e) => {
     e.preventDefault();
+    // Modal dialogs render in the top layer and would cover the recovery screen.
+    closeDialogs();
+    keys.clear();
+    resetJoystick();
+    if (document.pointerLockElement) document.exitPointerLock();
     $("loading").style.display = "flex";
     $("loading").style.opacity = "1";
     stories?.save();
