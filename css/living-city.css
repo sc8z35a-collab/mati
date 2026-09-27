@@ -197,7 +197,7 @@
 #menu-button:hover {
   background: #152b32c9;
 }
-#game.photo-mode #menu-button {
+.photo-mode #menu-button {
   display: none;
 }
 #menu-dialog {
@@ -549,7 +549,7 @@
 .service-secondary button { border: 0; background: transparent; color: #9eb5b0; font-size: 10px; }
 .service-note { margin: 13px 0 0; font-size: 9px; color: #7c9694; line-height: 1.8; }
 .service-panel button:focus-visible, .service-launch:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
-#game.photo-mode .service-panel, #game.photo-mode .service-launch { display: none; }
+.photo-mode .service-panel, .photo-mode .service-launch { display: none; }
 @media (max-width: 600px) {
   .service-launch { top: max(16px, env(safe-area-inset-top)); left: 12px; padding: 10px 12px; gap: 8px; }
   .service-panel { top: 73px; left: 12px; width: min(288px, calc(100vw - 24px)); max-height: calc(100dvh - 150px); padding: 16px; }

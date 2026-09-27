@@ -26,12 +26,15 @@ window.EvercityAudio = class EvercityAudio {
     for (let i = 0; i < 3; i++) {
       const oscillator = this.context.createOscillator(),
         gain = this.context.createGain(),
-        pan = this.context.createStereoPanner();
+        // Older Safari lacks StereoPannerNode; keep engine sound without panning.
+        pan = this.context.createStereoPanner?.() || null;
       oscillator.type = "triangle";
       gain.gain.value = 0;
       oscillator.connect(gain);
-      gain.connect(pan);
-      pan.connect(this.master);
+      if (pan) {
+        gain.connect(pan);
+        pan.connect(this.master);
+      } else gain.connect(this.master);
       oscillator.start();
       this.engines.push({ oscillator, gain, pan });
     }
@@ -61,7 +64,7 @@ window.EvercityAudio = class EvercityAudio {
       volume = paused ? 0 : indoor ? 0.18 : 1;
     this.wind.gain.gain.setTargetAtTime(0.24 * volume, now, 0.25);
     this.rain.gain.gain.setTargetAtTime(
-      weather === "rain" ? 0.9 * (indoor ? 0.28 : 1) : 0,
+      weather === "rain" && !paused ? 0.9 * (indoor ? 0.28 : 1) : 0,
       now,
       0.3,
     );
@@ -83,7 +86,7 @@ window.EvercityAudio = class EvercityAudio {
         );
         const dx = item.v.g.position.x - player.x,
           dz = item.v.g.position.z - player.z;
-        engine.pan.pan.setTargetAtTime(
+        engine.pan?.pan.setTargetAtTime(
           Math.max(
             -1,
             Math.min(

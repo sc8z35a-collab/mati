@@ -428,13 +428,18 @@ class EvercityServices {
           this.oscillator = this.audio.createOscillator(); this.oscillator.type = "sine";
           this.oscillator.connect(this.gain); this.oscillator.start();
         }
-        this.audio.resume().catch(() => this.toast("音声を再生できませんでした"));
         this.sound = !this.sound; this.renderUI();
+        this.audio.resume().catch(() => { this.sound = false; this.renderUI(); this.toast("音声を再生できませんでした"); });
       } catch { this.toast("このブラウザーでは音声を利用できません"); }
     };
-    document.addEventListener("visibilitychange", () => { if (document.hidden && this.gain) this.gain.gain.value = 0; });
+    document.addEventListener("visibilitychange", () => {
+      if (!this.audio) return;
+      // Suspend the context itself so a hidden tab stops consuming audio/CPU.
+      if (document.hidden) { this.gain.gain.value = 0; this.audio.suspend().catch(() => {}); }
+      else if (this.sound) this.audio.resume().catch(() => {});
+    });
     document.addEventListener("keydown", e => {
-      if (e.code === "Escape" && this.overview) { this.overview = false; this.renderUI(); }
+      if (e.code === "Escape" && this.overview && !document.querySelector("dialog[open]")) { this.overview = false; this.renderUI(); }
     });
     this.renderUI();
   }
@@ -475,8 +480,14 @@ class EvercityServices {
   statusUI() {
     const s = this.sites[this.selected], t = s.elapsed;
     const status = t === null ? "待機中 / READY" : t < 3 ? "車庫開放 / STANDBY" : t < 19 ? "敷地内訓練 / ACTIVE" : "帰投・格納 / RETURN";
-    document.getElementById("service-status").textContent = this.paused ? "演出停止中 / PAUSED" : status;
-    document.getElementById("service-progress").style.width = t === null ? "0%" : Math.min(100, t / 28 * 100) + "%";
+    // Called every frame: only touch the live region / style when the value changes,
+    // otherwise screen readers re-announce the status continuously.
+    const text = this.paused ? "演出停止中 / PAUSED" : status,
+      el = document.getElementById("service-status"),
+      bar = document.getElementById("service-progress"),
+      width = t === null ? "0%" : Math.min(100, t / 28 * 100).toFixed(1) + "%";
+    if (el.textContent !== text) el.textContent = text;
+    if (bar.style.width !== width) bar.style.width = width;
   }
   update(dt, player, camera, suspended = false) {
     const delta = this.paused || suspended ? 0 : dt;
@@ -503,7 +514,7 @@ class EvercityServices {
           this.dummy.rotation.set(0, a, 0); this.dummy.scale.set(0.3, 0.12, 0.3); this.dummy.updateMatrix();
           s.dust.setMatrixAt(i, this.dummy.matrix);
         }
-        s.dust.instanceMatrix.needsUpdate = true;
+        if (s.dust.visible) s.dust.instanceMatrix.needsUpdate = true;
       }
       if (s.water) {
         s.water.visible = active && t > 5 && t < 23;
@@ -513,7 +524,7 @@ class EvercityServices {
           this.dummy.rotation.set(q, q, 0); this.dummy.scale.setScalar(0.09 + q * 0.12); this.dummy.updateMatrix();
           s.water.setMatrixAt(i, this.dummy.matrix);
         }
-        s.water.instanceMatrix.needsUpdate = true;
+        if (s.water.visible) s.water.instanceMatrix.needsUpdate = true;
       }
     });
     for (const unit of this.units) {
@@ -523,8 +534,10 @@ class EvercityServices {
         // A rounded circuit on the empty central forecourt, not public traffic lanes.
         const q = (t - 3) / 22, a = q * Math.PI * 2;
         unit.group.position.x += 12 * (1 - Math.cos(a));
-        unit.group.position.z += 10 * Math.sin(a) + 13 * Math.sin(Math.PI * q);
-        unit.group.rotation.y = Math.atan2(24 * Math.PI * Math.sin(a), 20 * Math.PI * Math.cos(a) + 13 * Math.PI * Math.cos(Math.PI * q));
+        // The loop bulges into the forecourt (z > 0) on the way back, so the unit keeps
+        // >= 1.5m from the vehicles parked at z = 0 (the previous path drove through them).
+        unit.group.position.z += 2 * Math.sin(a) + 17 * Math.sin(Math.PI * q);
+        unit.group.rotation.y = Math.atan2(24 * Math.PI * Math.sin(a), 4 * Math.PI * Math.cos(a) + 17 * Math.PI * Math.cos(Math.PI * q));
         unit.wheels.forEach(w => { w.rotation.x -= delta * 5; });
       }
       unit.lights.visible = t === null || Math.sin(this.time * (this.reducedMotion ? 2 : 9)) > -0.1;
