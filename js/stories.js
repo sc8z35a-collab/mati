@@ -375,6 +375,10 @@ window.EvercityStories = class EvercityStories {
     try {
       localStorage.setItem("evercity-stories-v3", JSON.stringify(this.data));
       document.getElementById("save-status").textContent = "この端末に保存済み";
+      // A saved position is resumable even in the session that created it.
+      if (this.data.position) {
+        document.getElementById("resume-button").classList.remove("hidden");
+      }
       return true;
     } catch (e) {
       document.getElementById("save-status").textContent =
@@ -449,13 +453,15 @@ window.EvercityStories = class EvercityStories {
       pin.userData.photoMarker = true;
       pin.position.y = 2.55;
       g.add(pin);
-      g.position.set(p.x, ["hana", "sora"].includes(p.id) ? 0.65 : 0.32, p.z);
+      const ground = ["hana", "sora"].includes(p.id) ? 0.65 : 0.32;
+      g.position.set(p.x, ground, p.z);
       scene.add(g);
       this.npcs.push({ ...p, g, pin });
       const nameplate = this.a.label(
         p.name + " / " + p.role,
         p.x,
-        2.45,
+        // Float above the head (head top ~2.0m above the feet), not across the face.
+        ground + 2.3,
         p.z + 0.4,
         3.7,
         "#dcf1e2",
@@ -1175,9 +1181,11 @@ window.EvercityStories = class EvercityStories {
     $("photo-album-button").onclick = () => this.openAlbum();
     $("resume-button").onclick = () => this.resume();
     $("save-button").onclick = () => {
-      this.a.toast(
-        this.save() ? "現在地と依頼を保存しました" : "保存に失敗しました",
-      );
+      const saved = this.save();
+      // An explicit save becomes the point "前回の続きから" returns to.
+      if (saved && this.data.position)
+        this.resumePosition = structuredClone(this.data.position);
+      this.a.toast(saved ? "現在地と依頼を保存しました" : "保存に失敗しました");
     };
     addEventListener("keydown", (e) => {
       if (this.busy || this.a.dialogOpen() || e.repeat) return;

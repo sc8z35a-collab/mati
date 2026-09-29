@@ -1897,11 +1897,9 @@
       (p) => Math.abs(player.x - p.x) < 28 && Math.abs(player.z - p.z) < 28,
     );
     if (inPark) {
-      title =
-        inPark.x === 0 && inPark.z === 72
-          ? "セントラル・ガーデン"
-          : "ネイバーフッド・パーク";
-      en = "CENTRAL GARDEN";
+      const central = inPark.x === 0 && inPark.z === 72;
+      title = central ? "セントラル・ガーデン" : "ネイバーフッド・パーク";
+      en = central ? "CENTRAL GARDEN" : "NEIGHBORHOOD PARK";
     }
     if (currentBuilding) {
       title = currentBuilding.jp;
@@ -2805,7 +2803,11 @@
       ctx.lineTo(px(p.x), pz(p.z + 23));
       ctx.stroke();
     }
+    // Map overlays set their own text alignment; restore the default for later labels.
+    ctx.save();
     services?.drawMap(ctx, px, pz, scale);
+    ctx.restore();
+    ctx.textAlign = "left";
     stories?.drawGoal(ctx, px, pz);
     const x = px(player.x),
       y = pz(player.z);
@@ -2954,6 +2956,7 @@
       }
     }
   }
+  let updateDetailStatus = null;
   let lastDialogPaint = 0,
     qualitySeconds = 0,
     slowSeconds = 0;
@@ -2978,9 +2981,10 @@
         exterior.update(1, player, timeMode);
         $("quality-select").value = next;
         updateActorStatus();
+        updateDetailStatus?.();
         toast(
           "動作を安定させるため画質を " +
-            next.toUpperCase() +
+            $("quality-select").selectedOptions[0].textContent.split(" /")[0] +
             " に調整しました",
         );
       }
@@ -3566,7 +3570,7 @@
       exterior.ready = true;
       const qualitySelect = $("quality-select");
       qualitySelect.value = exterior.quality;
-      const updateDetailStatus = () => {
+      updateDetailStatus = () => {
         $("detail-status").textContent =
           exterior.snapshot().objectCount.toLocaleString("ja-JP") +
           "個・" +
