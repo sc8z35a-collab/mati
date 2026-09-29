@@ -81,6 +81,12 @@ window.EvercityTraffic = class EvercityTraffic {
       ),
     };
   }
+  // Feet rest on the 0.28m pavement, or on the 0.01m asphalt while crossing a road.
+  static groundY(x, z) {
+    const gx = Math.abs(x - Math.round(x / 72) * 72),
+      gz = Math.abs(z - Math.round(z / 72) * 72);
+    return gx > 27 || gz > 27 ? 0.01 : 0.28;
+  }
   position(a, pos = a.pos) {
     if (a.turn) return a.turn.at;
     if (a.errand) return a.errand.at;
@@ -419,7 +425,7 @@ window.EvercityTraffic = class EvercityTraffic {
         return false;
       const b = this.buildings.find(
         (b) =>
-          Math.abs(p.lane - (b.z + 29)) < 1.5 && Math.abs(p.pos - b.x) < 0.3,
+          Math.abs(p.lane - (b.z + 26.2)) < 0.6 && Math.abs(p.pos - b.x) < 0.3,
       );
       if (!b) return false;
       p.errand = {
@@ -466,7 +472,7 @@ window.EvercityTraffic = class EvercityTraffic {
       if (p.g && d > 0.01) p.g.rotation.y = Math.atan2(dx, dz);
     }
     if (p.g) {
-      p.g.position.set(e.at.x, 0.31, e.at.z);
+      p.g.position.set(e.at.x, EvercityTraffic.groundY(e.at.x, e.at.z), e.at.z);
       if (!p.waiting) p.phase += dt * 6;
       p.legs[0].rotation.x = p.waiting ? 0 : Math.sin(p.phase) * 0.3;
       p.legs[1].rotation.x = -p.legs[0].rotation.x;
@@ -492,8 +498,9 @@ window.EvercityTraffic = class EvercityTraffic {
         const original = p.lane,
           sign = p.id % 2 ? 1 : -1;
         for (const side of [sign, -sign]) {
-          const trial = original + side * 0.7;
-          if (Math.abs(trial - p.homeLane) > 1.5) continue;
+          const trial = original + side * 0.5;
+          // Never sidestep off the kerb into the road (lanes sit 0.55-1.05m inside it).
+          if (Math.abs(trial - p.homeLane) > 0.5) continue;
           p.lane = trial;
           if (this.pedestrianMoveSafe(p, next)) {
             p.pos = next;
@@ -521,7 +528,7 @@ window.EvercityTraffic = class EvercityTraffic {
     } else this.stats.pedestrianWaits++;
     if (p.g) {
       const at = this.position(p);
-      p.g.position.set(at.x, 0.31, at.z);
+      p.g.position.set(at.x, EvercityTraffic.groundY(at.x, at.z), at.z);
       p.g.rotation.y = (p.axis ? Math.PI / 2 : 0) + (p.dir < 0 ? Math.PI : 0);
       if (!p.waiting) p.phase += dt * 6;
       const swing = p.waiting ? 0 : Math.sin(p.phase) * 0.3;

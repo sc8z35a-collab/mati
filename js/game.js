@@ -1345,17 +1345,17 @@
               "line",
               cx + stripe * 1.13,
               0.036,
-              cz + side * 11,
+              cz + side * 10,
               0.56,
               0.025,
-              2.5,
+              2.2,
             );
             box(
               "line",
-              cx + side * 11,
+              cx + side * 10,
               0.036,
               cz + stripe * 1.13,
-              2.5,
+              2.2,
               0.025,
               0.56,
             );
@@ -1546,7 +1546,8 @@
       const axis = n % 2,
         dir = n % 4 < 2 ? 1 : -1,
         lane =
-          (Math.floor(random() * 9) - 4) * 72 + dir * 29 + ((n % 3) - 1) * 0.65;
+          // Sidewalk walking band: inside the 27m curb, outside street lights/furniture (<=25.9m).
+          (Math.floor(random() * 9) - 4) * 72 + dir * (26.2 + ((n % 3) - 1) * 0.25);
       let pos = 0;
       for (let attempt = 0; attempt < 200; attempt++) {
         pos = random() * 620 - 310;
@@ -1566,7 +1567,11 @@
         )
           break;
       }
-      g.position.set(axis ? pos : lane, 0.31, axis ? lane : pos);
+      g.position.set(
+        axis ? pos : lane,
+        EvercityTraffic.groundY(axis ? pos : lane, axis ? lane : pos),
+        axis ? lane : pos,
+      );
       g.traverse((o) => {
         o.castShadow = false;
       });
