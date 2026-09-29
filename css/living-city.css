@@ -570,3 +570,10 @@ body.immersive .story-card {
 body.immersive #game:has(#service-panel:not([hidden])) .story-card {
   visibility: hidden;
 }
+
+/* The open safety panel covers the minimap on narrow screens; hide the map beneath it. */
+@media (max-width: 600px) {
+  body.immersive #game:has(#service-panel:not([hidden])) .minimap-panel {
+    visibility: hidden;
+  }
+}
