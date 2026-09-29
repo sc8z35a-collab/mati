@@ -556,3 +556,17 @@
   .service-tabs { margin-bottom: 15px; }
   .service-stats { padding: 10px 0; margin: 12px 0; }
 }
+
+/* The safety-district launcher occupies the top-left corner; keep the story card below it. */
+body.immersive .story-card {
+  top: calc(max(22px, env(safe-area-inset-top)) + 58px);
+}
+@media (max-width: 600px) {
+  body.immersive .story-card {
+    top: calc(max(16px, env(safe-area-inset-top)) + 54px);
+  }
+}
+/* The open safety panel would otherwise cover the story card as well. */
+body.immersive #game:has(#service-panel:not([hidden])) .story-card {
+  visibility: hidden;
+}
