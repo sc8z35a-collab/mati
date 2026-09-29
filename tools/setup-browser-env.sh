@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Rebuilds the headless Chromium + Three.js r158 environment used for visual debugging.
 set -e
-ROOT="$(cd "$ROOT" && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 mkdir -p /tmp/pw /tmp/shots
 cd /tmp/pw
 [ -f package.json ] || npm init -y >/dev/null
