@@ -1373,7 +1373,7 @@
             "line",
             cx - side * 14.1,
             0.039,
-            cz + side * 4.1,
+            cz - side * 4.1, // stop bar on the keep-left lane approaching from -side
             0.32,
             0.027,
             7.5,
