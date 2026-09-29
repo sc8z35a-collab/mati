@@ -300,7 +300,7 @@ window.EvercityTraffic = class EvercityTraffic {
       dir = (v.id + v.routeCount) % 2 ? 1 : -1;
     const start = this.position(v),
       end = axis
-        ? { x: c.x + dir * 12, z: c.z + dir * 3.9 }
+        ? { x: c.x + dir * 12, z: c.z - dir * 3.9 } // keep-left: travel along +x uses -z
         : { x: c.x + dir * 3.9, z: c.z + dir * 12 };
     const control = v.axis
       ? { x: end.x, z: start.z }
@@ -578,11 +578,12 @@ window.EvercityTraffic = class EvercityTraffic {
     for (const c of this.intersections)
       for (const axis of [0, 1])
         for (const dir of [-1, 1]) {
+          // Poles stand beside, and heads hang over, the approaching keep-left lane.
           const x = c.x + (axis ? -dir * 14 : dir * 10.9),
-            z = c.z + (axis ? dir * 10.9 : -dir * 14);
+            z = c.z + (axis ? -dir * 10.9 : -dir * 14);
           arm(x, 3.3, z, 0.13, 6.6, 0.13);
           const hx = axis ? x : c.x + dir * 3.9,
-            hz = axis ? c.z + dir * 3.9 : z;
+            hz = axis ? c.z - dir * 3.9 : z;
           arm(
             (x + hx) / 2,
             6.55,

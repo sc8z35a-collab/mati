@@ -1485,7 +1485,9 @@
       }
       const axis = n % 2,
         dir = n % 4 < 2 ? 1 : -1,
-        lane = (Math.floor(random() * 8) - 4) * 72 + 36 + dir * 3.9;
+        // Keep-left on both axes: +x for northbound/southbound travel along z, -z for travel along +x.
+        lane =
+          (Math.floor(random() * 8) - 4) * 72 + 36 + (axis ? -dir : dir) * 3.9;
       let pos = 0;
       for (let attempt = 0; attempt < 200; attempt++) {
         pos = random() * 620 - 310;
