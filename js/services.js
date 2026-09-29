@@ -141,6 +141,7 @@ class EvercityServices {
     }
     // Gear lockers, radio desk, monitors, storage and ceiling lights inside open bays.
     for (let i = 0; i < 8; i++) {
+      this.solid(s, -21 + i * 3.7, -19.8, 1.5, 0.9, 3);
       v(s.color, -21 + i * 3.7, 1.65, -19.8, 1.5, 2.7, 0.9);
       v("silver", -20.5 + i * 3.7, 1.65, -19.28, 0.12, 0.45, 0.08);
       for (let n = 0; n < 3; n++) v("dark", -21 + i * 3.7, 2.35 + n * 0.15, -19.3, 0.85, 0.06, 0.06);
@@ -494,9 +495,13 @@ class EvercityServices {
     this.time += delta;
     const near = player.z > 285;
     this.root.visible = near || this.overview;
+    // A demo vehicle that would drive into the player holds the whole drill (gate, water, heli).
+    const held = new Set(this.units.filter(u => u.primary && u.site.elapsed !== null && delta > 0 && player.floor === 0 && (() => {
+      u.site.elapsed += delta; const hit = this.unitHits(u, player.x, player.z); u.site.elapsed -= delta; return hit;
+    })()).map(u => u.site));
     this.sites.forEach(s => {
       s.group.visible = this.overview ? s === this.sites[this.selected] || Math.abs(s.x - this.sites[this.selected].x) < 80 : Math.hypot(player.x - s.x, player.z - s.z) < 200;
-      if (s.elapsed !== null) {
+      if (s.elapsed !== null && !held.has(s)) {
         s.elapsed += delta;
         if (s.elapsed >= 28) { s.elapsed = null; this.renderUI(); }
       }
@@ -572,13 +577,29 @@ class EvercityServices {
       camera.lookAt(s.x - 3, 3.5, s.z - 2);
     }
   }
+  // Where the unit's body will be this frame, evaluated at the next path position.
+  unitHits(u, x, z) {
+    const t = u.site.elapsed, pos = u.home.clone();
+    let yaw = 0;
+    if (t !== null && t > 3 && t < 25) {
+      const q = (t - 3) / 22, a = q * Math.PI * 2;
+      pos.x += 12 * (1 - Math.cos(a));
+      pos.z += 2 * Math.sin(a) + 17 * Math.sin(Math.PI * q);
+      yaw = Math.atan2(24 * Math.PI * Math.sin(a), 4 * Math.PI * Math.cos(a) + 17 * Math.PI * Math.cos(Math.PI * q));
+    }
+    const dx = x - u.site.x - pos.x, dz = z - u.site.z - pos.z, c = Math.cos(yaw), s = Math.sin(yaw);
+    return Math.abs(dx * c - dz * s) < 1.65 && Math.abs(dx * s + dz * c) < u.length / 2 + 0.35;
+  }
   blocked(x, z) {
     // Visible units, including moving demonstration vehicles, remain solid.
-    return this.units.some(u => {
+    if (this.units.some(u => {
       const dx = x - u.site.x - u.group.position.x, dz = z - u.site.z - u.group.position.z;
       const angle = u.group.rotation.y, c = Math.cos(angle), s = Math.sin(angle);
       return Math.abs(dx * c - dz * s) < 1.65 && Math.abs(dx * s + dz * c) < u.length / 2 + 0.35;
-    });
+    })) return true;
+    // Parked helicopter (fuselage and tail boom) on the relief base pad.
+    return this.sites.some(site => site.heli && site.heli.position.y < 2 &&
+      Math.abs(x - site.x - site.heli.position.x) < 1.6 && z - site.z - site.heli.position.z > -7 && z - site.z - site.heli.position.z < 3.3);
   }
   drawMap(ctx, px, pz, scale) {
     this.sites.forEach((s, i) => {

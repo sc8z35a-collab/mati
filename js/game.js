@@ -519,6 +519,8 @@
       const xx = x + side * w * 0.3;
       plant(xx, y, z + d / 2 - 3, 1.1);
       plant(xx, y, z - d / 2 + 3, 1.15);
+      furnitureSolid(xx, z + d / 2 - 3, 1, 1, 1.9);
+      furnitureSolid(xx, z - d / 2 + 3, 1, 1, 1.9);
       if (b.type !== "residential")
         for (let zz = -d / 2 + 9; zz < d / 2 - 3; zz += 9) {
           box("light", xx, y + FLOOR - 0.2, z + zz, 5, 0.12, 0.7);
@@ -1253,10 +1255,12 @@
     }
     for (const side of [-1, 1]) {
       plant(x + side * (w / 2 - 4), ry, z + d / 2 - 4, 1.5);
+      furnitureSolid(x + side * (w / 2 - 4), z + d / 2 - 4, 1.35, 1.35, 2.6);
       sofa(x + side * 8, ry, z + 4);
       table(x + side * 8, ry, z + 1.5, 2.7, 1.3);
     }
     cyl("metal", x - w / 2 + 4, ry + 4, z - d / 2 + 4, 0.07, 8);
+    furnitureSolid(x - w / 2 + 4, z - d / 2 + 4, 0.3, 0.3, 8);
     interior(b, 0);
     // Street-side details: bike hoops, planters, terraces, signs and lighting.
     tree(x - 23, z + 22, 0.85);
@@ -2190,7 +2194,13 @@
         )
           ground = 0.33;
     }
-    if (!b && player.z > 350) ground = -0.04;
+    // Public-safety district: 0.26m forecourts inside each base, 0.01m asphalt elsewhere.
+    if (!b && player.z > 330) {
+      const site = services?.sites.find(
+        (s) => Math.abs(player.x - s.x) < 27 && Math.abs(player.z - s.z) < 27,
+      );
+      ground = (site ? 0.26 : 0.01) - 0.32;
+    }
     const solids = b ? b.solids[player.floor] || [] : obstacles;
     for (const ob of solids) {
       if (
@@ -2593,8 +2603,13 @@
     clearActiveInterior();
     player.floor = 0;
     player.building = null;
-    player.x = b.park ? b.x + 15 : b.x;
-    player.z = b.park ? b.z + 29 : b.z + b.d / 2 + 7;
+    // Arrive on the pavement (the curb is 27m from a block centre), never in the roadway.
+    player.x = b.park ? b.x + 3 : b.x;
+    player.z = b.park
+      ? b.z + 25
+      : b.service
+        ? b.z + b.d / 2 + 7
+        : b.z + Math.min(b.d / 2 + 4, 25.5);
     player.y = 2.02;
     player.yaw = 0;
     player.pitch = 0.07;
