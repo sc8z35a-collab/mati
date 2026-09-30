@@ -3686,6 +3686,7 @@
         current: () => currentBuilding,
         loadFloor,
         teleport,
+        updateLocation,
         blocked,
         setTime,
         getTime: () => timeMode,

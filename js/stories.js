@@ -1160,6 +1160,9 @@ window.EvercityStories = class EvercityStories {
     this.a.start();
     this.a.closeDialogs();
     this.a.player.y = 0.32 + this.a.player.floor * 5.6 + 1.7;
+    // Refresh the current building, elevator prompt and HUD for the restored position.
+    this.a.updateLocation?.();
+    this.renderHUD();
     this.a.toast("前回の探索から再開しました");
   }
   bind() {
