@@ -1218,7 +1218,7 @@ window.EvercityStories = class EvercityStories {
           (e.code === "Enter" && ["BUTTON", "A"].includes(t.tagName)))
       )
         return;
-      if (e.code === "KeyJ") this.openJournal();
+      if (e.code === "KeyJ" && !this.photoMode) this.openJournal();
       if (e.code === "KeyP") this.toggleCamera();
       if (e.code === "Enter" && this.photoMode) {
         e.preventDefault();

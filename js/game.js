@@ -1775,6 +1775,7 @@
     );
   }
   function loadFloor(b, f) {
+    if (stories?.photoMode) stories.toggleCamera(false);
     if (services?.overview) {
       services.overview = false;
       services.renderUI();
@@ -2328,6 +2329,11 @@
     }
     if (e.code.startsWith("Shift")) keys.add(e.code);
     if (e.repeat) return;
+    // The camera hides the interaction prompt and HUD: world/menu shortcuts wait until it closes.
+    if (stories?.photoMode) {
+      if (e.code === "KeyF") toggleFullscreen();
+      return;
+    }
     if (e.code === "KeyM") openMap();
     if (e.code === "KeyE") useNearby();
     if (e.code === "KeyF") toggleFullscreen();
@@ -2597,6 +2603,8 @@
     environment?.apply();
   }
   function teleport(b) {
+    // Arriving somewhere new ends the photo session and restores the walking lens.
+    if (stories?.photoMode) stories.toggleCamera(false);
     if (services) {
       services.overview = false;
       if (b.service) services.selected = services.sites.indexOf(b);
