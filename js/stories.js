@@ -588,7 +588,10 @@ window.EvercityStories = class EvercityStories {
         );
         this.save();
         this.renderHUD();
-        this.a.toast("コーヒーで一息。3分間、徒歩の速度が少し上がります。");
+        const minutes = Math.round((this.coffeeUntil - this.time) / 60);
+        this.a.toast(
+          `コーヒーで一息。残り${minutes}分間、歩く・走る速度が少し上がります。`,
+        );
         $("resident-dialog").close();
       });
     if (npc.id === "kei") {
