@@ -577,3 +577,13 @@ body.immersive #game:has(#service-panel:not([hidden])) .story-card {
     visibility: hidden;
   }
 }
+/* Short landscape screens: the card sits between the launcher and the bottom-left minimap. */
+@media (max-height: 520px) {
+  body.immersive .story-card {
+    top: calc(max(12px, env(safe-area-inset-top)) + 54px);
+    max-height: calc(100dvh - 66px - 212px);
+  }
+  body.immersive .service-launch {
+    top: max(12px, env(safe-area-inset-top));
+  }
+}
