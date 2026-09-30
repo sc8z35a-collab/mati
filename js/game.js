@@ -385,6 +385,7 @@
   function chair(x, y, z, rot = 0, color = "fabric") {
     furnitureSolid(x, z, 0.85, 0.85, 1.4);
     box(color, x, y + 0.6, z, 0.75, 0.16, 0.77, rot);
+    // The backrest sits on the +rot side: rot 0 puts it at +z (sitter faces -z).
     box(
       color,
       x + Math.sin(rot) * 0.32,
@@ -519,6 +520,8 @@
       const xx = x + side * w * 0.3;
       plant(xx, y, z + d / 2 - 3, 1.1);
       plant(xx, y, z - d / 2 + 3, 1.15);
+      furnitureSolid(xx, z + d / 2 - 3, 1, 1, 1.9);
+      furnitureSolid(xx, z - d / 2 + 3, 1, 1, 1.9);
       if (b.type !== "residential")
         for (let zz = -d / 2 + 9; zz < d / 2 - 3; zz += 9) {
           box("light", xx, y + FLOOR - 0.2, z + zz, 5, 0.12, 0.7);
@@ -564,8 +567,8 @@
         for (let zz = -4; zz < d / 2 - 4; zz += 6) {
           let tx = x + side * w * 0.29;
           table(tx, y, z + zz, 2.6, 1.4);
-          chair(tx - 1.75, y, z + zz, Math.PI / 2);
-          chair(tx + 1.75, y, z + zz, -Math.PI / 2);
+          chair(tx - 1.75, y, z + zz, -Math.PI / 2);
+          chair(tx + 1.75, y, z + zz, Math.PI / 2);
           plant(tx, y + 1.1, z + zz, 0.23);
           box("paper", tx + 0.7, y + 1.09, z + zz, 0.38, 0.03, 0.45);
         }
@@ -861,10 +864,13 @@
           });
       }
     } else {
+      // Accessories go only on the desks this floor actually has (see interior()):
+      // two rows per side on open-plan floors, one desk per side on focus floors.
+      const deskOffsets = f % 3 === 1 ? [] : f % 3 === 2 ? [w * 0.29] : [5.7, 10.3];
       for (const side of [-1, 1])
         for (let zz = -d / 2 + 10; zz < d / 2 - 4; zz += 5.8)
-          for (let n = 0; n < 2; n++) {
-            const tx = x + side * (5.7 + n * 4.6),
+          for (const offset of deskOffsets) {
+            const tx = x + side * offset,
               tz = z + zz;
             item("office-desk-set", () => {
               O("black", tx + 0.49, 1.14, tz + 0.26, 0.07, 0.045, 0.1);
@@ -1253,10 +1259,12 @@
     }
     for (const side of [-1, 1]) {
       plant(x + side * (w / 2 - 4), ry, z + d / 2 - 4, 1.5);
+      furnitureSolid(x + side * (w / 2 - 4), z + d / 2 - 4, 1.35, 1.35, 2.6);
       sofa(x + side * 8, ry, z + 4);
       table(x + side * 8, ry, z + 1.5, 2.7, 1.3);
     }
     cyl("metal", x - w / 2 + 4, ry + 4, z - d / 2 + 4, 0.07, 8);
+    furnitureSolid(x - w / 2 + 4, z - d / 2 + 4, 0.3, 0.3, 8);
     interior(b, 0);
     // Street-side details: bike hoops, planters, terraces, signs and lighting.
     tree(x - 23, z + 22, 0.85);
@@ -1269,8 +1277,8 @@
     if (type === "cafe") {
       for (const side of [-1, 1]) {
         table(x + side * 12, BASE, z + d / 2 + 4, 2, 1.3);
-        chair(x + side * 12 - 1.3, BASE, z + d / 2 + 4, Math.PI / 2);
-        chair(x + side * 12 + 1.3, BASE, z + d / 2 + 4, -Math.PI / 2);
+        chair(x + side * 12 - 1.3, BASE, z + d / 2 + 4, -Math.PI / 2);
+        chair(x + side * 12 + 1.3, BASE, z + d / 2 + 4, Math.PI / 2);
         cyl("metal", x + side * 12, 2.2, z + d / 2 + 4, 0.06, 3.8);
         part(
           "cone",
@@ -1345,17 +1353,17 @@
               "line",
               cx + stripe * 1.13,
               0.036,
-              cz + side * 11,
+              cz + side * 10,
               0.56,
               0.025,
-              2.5,
+              2.2,
             );
             box(
               "line",
-              cx + side * 11,
+              cx + side * 10,
               0.036,
               cz + stripe * 1.13,
-              2.5,
+              2.2,
               0.025,
               0.56,
             );
@@ -1373,7 +1381,7 @@
             "line",
             cx - side * 14.1,
             0.039,
-            cz + side * 4.1,
+            cz - side * 4.1, // stop bar on the keep-left lane approaching from -side
             0.32,
             0.027,
             7.5,
@@ -1485,7 +1493,9 @@
       }
       const axis = n % 2,
         dir = n % 4 < 2 ? 1 : -1,
-        lane = (Math.floor(random() * 8) - 4) * 72 + 36 + dir * 3.9;
+        // Keep-left on both axes: +x for northbound/southbound travel along z, -z for travel along +x.
+        lane =
+          (Math.floor(random() * 8) - 4) * 72 + 36 + (axis ? -dir : dir) * 3.9;
       let pos = 0;
       for (let attempt = 0; attempt < 200; attempt++) {
         pos = random() * 620 - 310;
@@ -1544,7 +1554,8 @@
       const axis = n % 2,
         dir = n % 4 < 2 ? 1 : -1,
         lane =
-          (Math.floor(random() * 9) - 4) * 72 + dir * 29 + ((n % 3) - 1) * 0.65;
+          // Sidewalk walking band: inside the 27m curb, outside street lights/furniture (<=25.9m).
+          (Math.floor(random() * 9) - 4) * 72 + dir * (26.2 + ((n % 3) - 1) * 0.25);
       let pos = 0;
       for (let attempt = 0; attempt < 200; attempt++) {
         pos = random() * 620 - 310;
@@ -1564,7 +1575,11 @@
         )
           break;
       }
-      g.position.set(axis ? pos : lane, 0.31, axis ? lane : pos);
+      g.position.set(
+        axis ? pos : lane,
+        EvercityTraffic.groundY(axis ? pos : lane, axis ? lane : pos),
+        axis ? lane : pos,
+      );
       g.traverse((o) => {
         o.castShadow = false;
       });
@@ -1760,6 +1775,7 @@
     );
   }
   function loadFloor(b, f) {
+    if (stories?.photoMode) stories.toggleCamera(false);
     if (services?.overview) {
       services.overview = false;
       services.renderUI();
@@ -1897,11 +1913,9 @@
       (p) => Math.abs(player.x - p.x) < 28 && Math.abs(player.z - p.z) < 28,
     );
     if (inPark) {
-      title =
-        inPark.x === 0 && inPark.z === 72
-          ? "セントラル・ガーデン"
-          : "ネイバーフッド・パーク";
-      en = "CENTRAL GARDEN";
+      const central = inPark.x === 0 && inPark.z === 72;
+      title = central ? "セントラル・ガーデン" : "ネイバーフッド・パーク";
+      en = central ? "CENTRAL GARDEN" : "NEIGHBORHOOD PARK";
     }
     if (currentBuilding) {
       title = currentBuilding.jp;
@@ -2185,7 +2199,13 @@
         )
           ground = 0.33;
     }
-    if (!b && player.z > 350) ground = -0.04;
+    // Public-safety district: 0.26m forecourts inside each base, 0.01m asphalt elsewhere.
+    if (!b && player.z > 330) {
+      const site = services?.sites.find(
+        (s) => Math.abs(player.x - s.x) < 27 && Math.abs(player.z - s.z) < 27,
+      );
+      ground = (site ? 0.26 : 0.01) - 0.32;
+    }
     const solids = b ? b.solids[player.floor] || [] : obstacles;
     for (const ob of solids) {
       if (
@@ -2309,6 +2329,11 @@
     }
     if (e.code.startsWith("Shift")) keys.add(e.code);
     if (e.repeat) return;
+    // The camera hides the interaction prompt and HUD: world/menu shortcuts wait until it closes.
+    if (stories?.photoMode) {
+      if (e.code === "KeyF") toggleFullscreen();
+      return;
+    }
     if (e.code === "KeyM") openMap();
     if (e.code === "KeyE") useNearby();
     if (e.code === "KeyF") toggleFullscreen();
@@ -2578,6 +2603,8 @@
     environment?.apply();
   }
   function teleport(b) {
+    // Arriving somewhere new ends the photo session and restores the walking lens.
+    if (stories?.photoMode) stories.toggleCamera(false);
     if (services) {
       services.overview = false;
       if (b.service) services.selected = services.sites.indexOf(b);
@@ -2588,8 +2615,13 @@
     clearActiveInterior();
     player.floor = 0;
     player.building = null;
-    player.x = b.park ? b.x + 15 : b.x;
-    player.z = b.park ? b.z + 29 : b.z + b.d / 2 + 7;
+    // Arrive on the pavement (the curb is 27m from a block centre), never in the roadway.
+    player.x = b.park ? b.x + 3 : b.x;
+    player.z = b.park
+      ? b.z + 25
+      : b.service
+        ? b.z + b.d / 2 + 7
+        : b.z + Math.min(b.d / 2 + 4, 25.5);
     player.y = 2.02;
     player.yaw = 0;
     player.pitch = 0.07;
@@ -2805,7 +2837,11 @@
       ctx.lineTo(px(p.x), pz(p.z + 23));
       ctx.stroke();
     }
+    // Map overlays set their own text alignment; restore the default for later labels.
+    ctx.save();
     services?.drawMap(ctx, px, pz, scale);
+    ctx.restore();
+    ctx.textAlign = "left";
     stories?.drawGoal(ctx, px, pz);
     const x = px(player.x),
       y = pz(player.z);
@@ -2954,6 +2990,7 @@
       }
     }
   }
+  let updateDetailStatus = null;
   let lastDialogPaint = 0,
     qualitySeconds = 0,
     slowSeconds = 0;
@@ -2978,9 +3015,10 @@
         exterior.update(1, player, timeMode);
         $("quality-select").value = next;
         updateActorStatus();
+        updateDetailStatus?.();
         toast(
           "動作を安定させるため画質を " +
-            next.toUpperCase() +
+            $("quality-select").selectedOptions[0].textContent.split(" /")[0] +
             " に調整しました",
         );
       }
@@ -3396,7 +3434,7 @@
   }
   // A read-only diagnostics hook enables reproducible in-browser validation.
   window.evercity = {
-    release: "20260921.3",
+    release: "20260930.1",
     serviceSnapshot: () => services?.snapshot(),
     objectSnapshot,
     objectTest: objectSelfTest,
@@ -3566,7 +3604,7 @@
       exterior.ready = true;
       const qualitySelect = $("quality-select");
       qualitySelect.value = exterior.quality;
-      const updateDetailStatus = () => {
+      updateDetailStatus = () => {
         $("detail-status").textContent =
           exterior.snapshot().objectCount.toLocaleString("ja-JP") +
           "個・" +
@@ -3657,6 +3695,7 @@
         current: () => currentBuilding,
         loadFloor,
         teleport,
+        updateLocation,
         blocked,
         setTime,
         getTime: () => timeMode,
@@ -3693,6 +3732,7 @@
         stories.resumePosition
       )
         stories.resume();
+      else if (!launchParams.has("test")) stories.restoreAtmosphere();
       $("loading").style.opacity = "0";
       $("loading").style.display = "none";
       $("game").dataset.ready = "true";

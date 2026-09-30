@@ -763,11 +763,12 @@
 }
 #photo-options {
   top: calc(max(12px, env(safe-area-inset-top)) + 58px);
-  bottom: 200px;
+  bottom: auto;
   left: max(12px, env(safe-area-inset-left));
   width: 300px;
   max-width: calc(100% - 24px);
-  max-height: none;
+  /* Size to the controls; scroll only when the viewport is short. */
+  max-height: calc(100dvh - 270px);
   padding: 12px;
 }
 #photo-options select {
@@ -801,6 +802,24 @@
     max-height: calc(100dvh - 205px);
   }
   #photo-options {
-    bottom: 180px;
+    max-height: calc(100dvh - 240px);
   }
+}
+/* The narrow floating minimap must keep its title on one line. */
+.immersive .map-heading > span {
+  white-space: nowrap;
+  min-width: 0;
+}
+/* Narrow floating minimap: keep the place name and coordinates on one line each. */
+.immersive .map-footer {
+  gap: 6px;
+  align-items: center;
+}
+.immersive .map-footer > span:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.immersive .map-footer #coordinates {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }

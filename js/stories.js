@@ -375,6 +375,10 @@ window.EvercityStories = class EvercityStories {
     try {
       localStorage.setItem("evercity-stories-v3", JSON.stringify(this.data));
       document.getElementById("save-status").textContent = "この端末に保存済み";
+      // A saved position is resumable even in the session that created it.
+      if (this.data.position) {
+        document.getElementById("resume-button").classList.remove("hidden");
+      }
       return true;
     } catch (e) {
       document.getElementById("save-status").textContent =
@@ -449,13 +453,15 @@ window.EvercityStories = class EvercityStories {
       pin.userData.photoMarker = true;
       pin.position.y = 2.55;
       g.add(pin);
-      g.position.set(p.x, ["hana", "sora"].includes(p.id) ? 0.65 : 0.32, p.z);
+      const ground = ["hana", "sora"].includes(p.id) ? 0.65 : 0.32;
+      g.position.set(p.x, ground, p.z);
       scene.add(g);
       this.npcs.push({ ...p, g, pin });
       const nameplate = this.a.label(
         p.name + " / " + p.role,
         p.x,
-        2.45,
+        // Float above the head (head top ~2.0m above the feet), not across the face.
+        ground + 2.3,
         p.z + 0.4,
         3.7,
         "#dcf1e2",
@@ -546,9 +552,13 @@ window.EvercityStories = class EvercityStories {
     if (s?.type === "talk" && s.npc === npc.id) {
       const m = this.active(),
         finalStep = this.data.progress[m.id] === m.steps.length - 1;
+      // The report reply must match what was actually done (a delivery is not a photo).
+      const lastDone = m.steps[this.data.progress[m.id] - 1];
       $("resident-words").textContent =
         this.data.progress[m.id] > 0
-          ? "見せてくれてありがとう。この街を、少し好きになってくれたなら嬉しいです。"
+          ? lastDone?.type === "deliver"
+            ? "届けてくれてありがとう。401号室の方も、きっと喜んでいます。"
+            : "見せてくれてありがとう。この街を、少し好きになってくれたなら嬉しいです。"
           : npc.hello;
       button(
         this.data.progress[m.id] > 0
@@ -582,7 +592,10 @@ window.EvercityStories = class EvercityStories {
         );
         this.save();
         this.renderHUD();
-        this.a.toast("コーヒーで一息。3分間、徒歩の速度が少し上がります。");
+        const minutes = Math.round((this.coffeeUntil - this.time) / 60);
+        this.a.toast(
+          `コーヒーで一息。残り${minutes}分間、歩く・走る速度が少し上がります。`,
+        );
         $("resident-dialog").close();
       });
     if (npc.id === "kei") {
@@ -600,7 +613,7 @@ window.EvercityStories = class EvercityStories {
           this.data.purchases.push(id);
           this.save();
           this.renderHUD();
-          this.a.toast(title + "を購入しました");
+          this.a.toast(title.split(" / ")[0] + "を購入しました");
           $("resident-dialog").close();
         });
       }
@@ -671,7 +684,9 @@ window.EvercityStories = class EvercityStories {
     if (g) {
       const dist = Math.hypot(p.x - g.x, p.z - g.z);
       let guide = Math.round(dist) + " m";
-      if (g.b && this.a.current() !== g.b) guide += " / 建物の入口へ";
+      // Inside another building's upper floors, the first step is always back down to 1F.
+      if (g.b && this.a.current() !== g.b)
+        guide += p.floor > 0 ? " / エレベーターで1Fへ" : " / 建物の入口へ";
       else if (p.floor !== g.floor)
         guide +=
           " / エレベーターで" +
@@ -775,7 +790,10 @@ window.EvercityStories = class EvercityStories {
         r.onsuccess = () => {
           clearTimeout(timeout);
           if (finished) {
-            r.result.close();
+            // A busy main thread (city generation, slow GPU) can delay the success event
+            // past the timeout. Adopt the late database instead of discarding it forever.
+            if (!this.db) this.adoptDatabase(r.result);
+            else r.result.close();
             return;
           }
           finished = true;
@@ -790,13 +808,17 @@ window.EvercityStories = class EvercityStories {
           (document.getElementById("photo-status").textContent =
             "古いタブを閉じるとアルバムの更新を続行できます。");
       });
-      this.db.onversionchange = () => {
-        this.db.close();
-        this.db = null;
-      };
+      this.adoptDatabase(this.db);
     } catch (e) {
-      this.db = null;
+      this.db = this.db || null;
     }
+  }
+  adoptDatabase(db) {
+    this.db = db;
+    db.onversionchange = () => {
+      db.close();
+      if (this.db === db) this.db = null;
+    };
   }
   async putPhoto(record) {
     await this.databaseReady;
@@ -1139,6 +1161,17 @@ window.EvercityStories = class EvercityStories {
     }
     p.yaw = saved.yaw;
     p.pitch = Math.max(-1.35, Math.min(1.35, saved.pitch));
+    this.restoreAtmosphere();
+    this.a.start();
+    this.a.closeDialogs();
+    this.a.player.y = 0.32 + this.a.player.floor * 5.6 + 1.7;
+    // Refresh the current building, elevator prompt and HUD for the restored position.
+    this.a.updateLocation?.();
+    this.renderHUD();
+    this.a.toast("前回の探索から再開しました");
+  }
+  // Saved time of day, weather and auto-cycle belong to the save, not only to a saved position.
+  restoreAtmosphere() {
     this.a.setTime(
       ["day", "golden", "night"].includes(this.data.time)
         ? this.data.time
@@ -1151,10 +1184,6 @@ window.EvercityStories = class EvercityStories {
       env.autoTime = !!this.data.autoTime;
       document.getElementById("auto-time").checked = env.autoTime;
     }
-    this.a.start();
-    this.a.closeDialogs();
-    this.a.player.y = 0.32 + this.a.player.floor * 5.6 + 1.7;
-    this.a.toast("前回の探索から再開しました");
   }
   bind() {
     const $ = (id) => document.getElementById(id);
@@ -1175,9 +1204,11 @@ window.EvercityStories = class EvercityStories {
     $("photo-album-button").onclick = () => this.openAlbum();
     $("resume-button").onclick = () => this.resume();
     $("save-button").onclick = () => {
-      this.a.toast(
-        this.save() ? "現在地と依頼を保存しました" : "保存に失敗しました",
-      );
+      const saved = this.save();
+      // An explicit save becomes the point "前回の続きから" returns to.
+      if (saved && this.data.position)
+        this.resumePosition = structuredClone(this.data.position);
+      this.a.toast(saved ? "現在地と依頼を保存しました" : "保存に失敗しました");
     };
     addEventListener("keydown", (e) => {
       if (this.busy || this.a.dialogOpen() || e.repeat) return;
@@ -1191,7 +1222,7 @@ window.EvercityStories = class EvercityStories {
           (e.code === "Enter" && ["BUTTON", "A"].includes(t.tagName)))
       )
         return;
-      if (e.code === "KeyJ") this.openJournal();
+      if (e.code === "KeyJ" && !this.photoMode) this.openJournal();
       if (e.code === "KeyP") this.toggleCamera();
       if (e.code === "Enter" && this.photoMode) {
         e.preventDefault();
@@ -1257,6 +1288,12 @@ window.EvercityStories = class EvercityStories {
     for (const n of this.npcs) {
       n.pin.position.y = 2.55 + Math.sin(this.time * 1.6) * 0.07;
       n.pin.rotation.y += dt * 0.7;
+      // Nameplates are flat text planes; turn them toward the viewer so they never read mirrored.
+      if (n.nameplate)
+        n.nameplate.rotation.y = Math.atan2(
+          this.a.player.x - n.nameplate.position.x,
+          this.a.player.z - n.nameplate.position.z,
+        );
     }
   }
   drawGoal(ctx, px, pz) {

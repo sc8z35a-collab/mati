@@ -57,12 +57,14 @@ window.EvercityPhotography = class EvercityPhotography {
       0.08,
       Math.min(occluderRange, Math.max(0.08, distance - tolerance)),
     );
+    // Sprites (street-light halos, clouds) raycast against the camera; without it they throw.
+    ray.camera = camera;
     scene.updateMatrixWorld(true);
     return !ray.intersectObjects(scene.children, true).some((hit) => {
       let object = hit.object;
       for (let node = object; node; node = node.parent)
         if (!node.visible || node.userData.photoMarker) return false;
-      if (!object.isMesh) return false;
+      if (!object.isMesh || object.isSprite) return false;
       const material = Array.isArray(object.material)
         ? object.material[hit.face?.materialIndex || 0]
         : object.material;
