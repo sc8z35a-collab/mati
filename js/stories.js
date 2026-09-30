@@ -1288,6 +1288,12 @@ window.EvercityStories = class EvercityStories {
     for (const n of this.npcs) {
       n.pin.position.y = 2.55 + Math.sin(this.time * 1.6) * 0.07;
       n.pin.rotation.y += dt * 0.7;
+      // Nameplates are flat text planes; turn them toward the viewer so they never read mirrored.
+      if (n.nameplate)
+        n.nameplate.rotation.y = Math.atan2(
+          this.a.player.x - n.nameplate.position.x,
+          this.a.player.z - n.nameplate.position.z,
+        );
     }
   }
   drawGoal(ctx, px, pz) {
