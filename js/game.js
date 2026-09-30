@@ -385,12 +385,12 @@
   function chair(x, y, z, rot = 0, color = "fabric") {
     furnitureSolid(x, z, 0.85, 0.85, 1.4);
     box(color, x, y + 0.6, z, 0.75, 0.16, 0.77, rot);
-    // rot is the direction the sitter faces (toward the table/desk); the backrest sits behind.
+    // The backrest sits on the +rot side: rot 0 puts it at +z (sitter faces -z).
     box(
       color,
-      x - Math.sin(rot) * 0.32,
+      x + Math.sin(rot) * 0.32,
       y + 1,
-      z - Math.cos(rot) * 0.32,
+      z + Math.cos(rot) * 0.32,
       0.75,
       0.75,
       0.13,
@@ -567,8 +567,8 @@
         for (let zz = -4; zz < d / 2 - 4; zz += 6) {
           let tx = x + side * w * 0.29;
           table(tx, y, z + zz, 2.6, 1.4);
-          chair(tx - 1.75, y, z + zz, Math.PI / 2);
-          chair(tx + 1.75, y, z + zz, -Math.PI / 2);
+          chair(tx - 1.75, y, z + zz, -Math.PI / 2);
+          chair(tx + 1.75, y, z + zz, Math.PI / 2);
           plant(tx, y + 1.1, z + zz, 0.23);
           box("paper", tx + 0.7, y + 1.09, z + zz, 0.38, 0.03, 0.45);
         }
@@ -1277,8 +1277,8 @@
     if (type === "cafe") {
       for (const side of [-1, 1]) {
         table(x + side * 12, BASE, z + d / 2 + 4, 2, 1.3);
-        chair(x + side * 12 - 1.3, BASE, z + d / 2 + 4, Math.PI / 2);
-        chair(x + side * 12 + 1.3, BASE, z + d / 2 + 4, -Math.PI / 2);
+        chair(x + side * 12 - 1.3, BASE, z + d / 2 + 4, -Math.PI / 2);
+        chair(x + side * 12 + 1.3, BASE, z + d / 2 + 4, Math.PI / 2);
         cyl("metal", x + side * 12, 2.2, z + d / 2 + 4, 0.06, 3.8);
         part(
           "cone",
