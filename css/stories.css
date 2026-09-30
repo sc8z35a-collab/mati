@@ -805,3 +805,8 @@
     max-height: calc(100dvh - 240px);
   }
 }
+/* The narrow floating minimap must keep its title on one line. */
+.immersive .map-heading > span {
+  white-space: nowrap;
+  min-width: 0;
+}

@@ -863,10 +863,13 @@
           });
       }
     } else {
+      // Accessories go only on the desks this floor actually has (see interior()):
+      // two rows per side on open-plan floors, one desk per side on focus floors.
+      const deskOffsets = f % 3 === 1 ? [] : f % 3 === 2 ? [w * 0.29] : [5.7, 10.3];
       for (const side of [-1, 1])
         for (let zz = -d / 2 + 10; zz < d / 2 - 4; zz += 5.8)
-          for (let n = 0; n < 2; n++) {
-            const tx = x + side * (5.7 + n * 4.6),
+          for (const offset of deskOffsets) {
+            const tx = x + side * offset,
               tz = z + zz;
             item("office-desk-set", () => {
               O("black", tx + 0.49, 1.14, tz + 0.26, 0.07, 0.045, 0.1);
