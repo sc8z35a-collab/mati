@@ -385,11 +385,12 @@
   function chair(x, y, z, rot = 0, color = "fabric") {
     furnitureSolid(x, z, 0.85, 0.85, 1.4);
     box(color, x, y + 0.6, z, 0.75, 0.16, 0.77, rot);
+    // rot is the direction the sitter faces (toward the table/desk); the backrest sits behind.
     box(
       color,
-      x + Math.sin(rot) * 0.32,
+      x - Math.sin(rot) * 0.32,
       y + 1,
-      z + Math.cos(rot) * 0.32,
+      z - Math.cos(rot) * 0.32,
       0.75,
       0.75,
       0.13,
