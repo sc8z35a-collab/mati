@@ -3723,6 +3723,7 @@
         stories.resumePosition
       )
         stories.resume();
+      else if (!launchParams.has("test")) stories.restoreAtmosphere();
       $("loading").style.opacity = "0";
       $("loading").style.display = "none";
       $("game").dataset.ready = "true";

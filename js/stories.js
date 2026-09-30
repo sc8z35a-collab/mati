@@ -1152,6 +1152,17 @@ window.EvercityStories = class EvercityStories {
     }
     p.yaw = saved.yaw;
     p.pitch = Math.max(-1.35, Math.min(1.35, saved.pitch));
+    this.restoreAtmosphere();
+    this.a.start();
+    this.a.closeDialogs();
+    this.a.player.y = 0.32 + this.a.player.floor * 5.6 + 1.7;
+    // Refresh the current building, elevator prompt and HUD for the restored position.
+    this.a.updateLocation?.();
+    this.renderHUD();
+    this.a.toast("前回の探索から再開しました");
+  }
+  // Saved time of day, weather and auto-cycle belong to the save, not only to a saved position.
+  restoreAtmosphere() {
     this.a.setTime(
       ["day", "golden", "night"].includes(this.data.time)
         ? this.data.time
@@ -1164,13 +1175,6 @@ window.EvercityStories = class EvercityStories {
       env.autoTime = !!this.data.autoTime;
       document.getElementById("auto-time").checked = env.autoTime;
     }
-    this.a.start();
-    this.a.closeDialogs();
-    this.a.player.y = 0.32 + this.a.player.floor * 5.6 + 1.7;
-    // Refresh the current building, elevator prompt and HUD for the restored position.
-    this.a.updateLocation?.();
-    this.renderHUD();
-    this.a.toast("前回の探索から再開しました");
   }
   bind() {
     const $ = (id) => document.getElementById(id);
