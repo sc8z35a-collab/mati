@@ -552,9 +552,13 @@ window.EvercityStories = class EvercityStories {
     if (s?.type === "talk" && s.npc === npc.id) {
       const m = this.active(),
         finalStep = this.data.progress[m.id] === m.steps.length - 1;
+      // The report reply must match what was actually done (a delivery is not a photo).
+      const lastDone = m.steps[this.data.progress[m.id] - 1];
       $("resident-words").textContent =
         this.data.progress[m.id] > 0
-          ? "見せてくれてありがとう。この街を、少し好きになってくれたなら嬉しいです。"
+          ? lastDone?.type === "deliver"
+            ? "届けてくれてありがとう。401号室の方も、きっと喜んでいます。"
+            : "見せてくれてありがとう。この街を、少し好きになってくれたなら嬉しいです。"
           : npc.hello;
       button(
         this.data.progress[m.id] > 0
