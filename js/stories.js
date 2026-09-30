@@ -677,7 +677,9 @@ window.EvercityStories = class EvercityStories {
     if (g) {
       const dist = Math.hypot(p.x - g.x, p.z - g.z);
       let guide = Math.round(dist) + " m";
-      if (g.b && this.a.current() !== g.b) guide += " / 建物の入口へ";
+      // Inside another building's upper floors, the first step is always back down to 1F.
+      if (g.b && this.a.current() !== g.b)
+        guide += p.floor > 0 ? " / エレベーターで1Fへ" : " / 建物の入口へ";
       else if (p.floor !== g.floor)
         guide +=
           " / エレベーターで" +
