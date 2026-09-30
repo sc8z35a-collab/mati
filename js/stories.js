@@ -781,7 +781,10 @@ window.EvercityStories = class EvercityStories {
         r.onsuccess = () => {
           clearTimeout(timeout);
           if (finished) {
-            r.result.close();
+            // A busy main thread (city generation, slow GPU) can delay the success event
+            // past the timeout. Adopt the late database instead of discarding it forever.
+            if (!this.db) this.adoptDatabase(r.result);
+            else r.result.close();
             return;
           }
           finished = true;
@@ -796,13 +799,17 @@ window.EvercityStories = class EvercityStories {
           (document.getElementById("photo-status").textContent =
             "古いタブを閉じるとアルバムの更新を続行できます。");
       });
-      this.db.onversionchange = () => {
-        this.db.close();
-        this.db = null;
-      };
+      this.adoptDatabase(this.db);
     } catch (e) {
-      this.db = null;
+      this.db = this.db || null;
     }
+  }
+  adoptDatabase(db) {
+    this.db = db;
+    db.onversionchange = () => {
+      db.close();
+      if (this.db === db) this.db = null;
+    };
   }
   async putPhoto(record) {
     await this.databaseReady;
