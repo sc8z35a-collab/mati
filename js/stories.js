@@ -606,7 +606,7 @@ window.EvercityStories = class EvercityStories {
           this.data.purchases.push(id);
           this.save();
           this.renderHUD();
-          this.a.toast(title + "を購入しました");
+          this.a.toast(title.split(" / ")[0] + "を購入しました");
           $("resident-dialog").close();
         });
       }
