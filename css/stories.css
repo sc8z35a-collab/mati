@@ -810,3 +810,16 @@
   white-space: nowrap;
   min-width: 0;
 }
+/* Narrow floating minimap: keep the place name and coordinates on one line each. */
+.immersive .map-footer {
+  gap: 6px;
+  align-items: center;
+}
+.immersive .map-footer > span:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.immersive .map-footer #coordinates {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
