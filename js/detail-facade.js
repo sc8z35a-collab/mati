@@ -65,17 +65,20 @@
     }
     float disc(vec2 q, vec2 c, float r) { return 1.0 - smoothstep(r - FW, r + FW, length(q - c)); }
     // Coverage of a periodic gap (duty = fraction that is "on"); fades to its mean when too fine.
+    // Analytically box-filtered pulse train (integral of the pulse over the pixel footprint):
+    // no aliasing, converges to the duty cycle when the pattern is finer than a pixel.
+    float pulseInt(float x, float duty) { return floor(x) * duty + clamp(fract(x) - (1.0 - duty), 0.0, duty); }
     float stripes(float x, float period, float duty) {
-      float f = fract(x / period);
-      float w = FW / period;
-      float v = smoothstep(1.0 - duty - w, 1.0 - duty + w, f);
-      return mix(v, duty, smoothstep(0.18, 0.5, w));
+      float w = max(FW / period, 1e-3);
+      float u = x / period;
+      return (pulseInt(u + w, duty) - pulseInt(u - w, duty)) / (2.0 * w);
     }
 
     void main() {
       // The floor the player is on shows its real, loaded interior instead.
       if (uHide.w > 0.5 && abs(vInfo.x - uHide.x) < 0.5 && abs(vInfo.y - uHide.y) < 0.5) discard;
-      float type = vInfo.z;
+      vec4 info = floor(vInfo + 0.5);
+      float type = info.z;
       bool office = type < 0.5;
       bool hotel = abs(type - 1.0) < 0.5;
       bool resi = abs(type - 2.0) < 0.5;
@@ -87,7 +90,7 @@
       float D = office ? 11.0 : hotel ? 6.5 : gallery ? 10.0 : 7.0;
       float ux = vUV.x - 1.7;
       float cx = floor(ux / W);
-      vec2 cell = vec2(cx, vInfo.y) + vInfo.x * vec2(7.13, 3.71) + vInfo.w;
+      vec2 cell = vec2(cx, info.y) + info.x * vec2(7.13, 3.71) + info.w * 31.7;
       float r1 = h2(cell), r2 = h2(cell + 17.3), r3 = h2(cell + 41.9), r4 = h2(cell + 3.1), r5 = h2(cell + 77.7);
 
       vec3 V = normalize(vWorld - cameraPosition);
@@ -109,8 +112,8 @@
       vec3 lamp = r2 < 0.32 ? vec3(1.0, 0.66, 0.36) : r2 < 0.62 ? vec3(1.0, 0.8, 0.56) : r2 < 0.86 ? vec3(1.0, 0.9, 0.78) : vec3(0.82, 0.9, 1.0);
       if (office) lamp = r2 < 0.72 ? vec3(0.9, 0.95, 1.0) : vec3(1.0, 0.9, 0.78);
       if (gallery) lamp = vec3(1.0, 0.93, 0.84);
-      float lampI = lit * (0.22 + 0.16 * uGolden + 1.5 * uNight);
-      vec3 daylight = uSkyBottom * (0.34 * uDay + 0.26 * uGolden + 0.012 * uNight);
+      float lampI = lit * (0.22 + 0.16 * uGolden + 0.95 * uNight);
+      vec3 daylight = uSkyBottom * (0.34 * uDay + 0.26 * uGolden) + vec3(0.09, 0.1, 0.14) * uNight;
 
       // ---- curtain / blind layer right behind the glass ----
       float cA = 0.06 + r3 * 0.36, cB = 0.06 + r4 * 0.34;          // curtain panel widths (fraction)
@@ -706,7 +709,7 @@
               pz = alongX ? b.z + side * inset : b.z;
             // Plane +Z must point outwards.
             const ry = alongX ? (side > 0 ? 0 : Math.PI) : side > 0 ? Math.PI / 2 : -Math.PI / 2;
-            items.push({ px, py: cy, pz, ry, len, H, info: [index, f, typeCode, face * 31.7] });
+            items.push({ px, py: cy, pz, ry, len, H, info: [index, f, typeCode, face] });
           }
         }
       });
