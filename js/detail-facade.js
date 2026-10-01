@@ -70,7 +70,7 @@
       bool hotel = abs(type - 1.0) < 0.5;
       bool resi = abs(type - 2.0) < 0.5;
       bool gallery = type > 4.5;
-      bool flat = abs(type - 3.0) < 0.5 || abs(type - 4.0) < 0.5; // upper floors of shops / cafes = apartments & studios
+      bool studio = abs(type - 3.0) < 0.5 || abs(type - 4.0) < 0.5; // upper floors of shops / cafes = apartments & studios
 
       float W = office || gallery ? 10.8 : 5.4;
       float H = 5.36;
@@ -97,11 +97,11 @@
       if (office) lamp = r2 < 0.72 ? vec3(0.9, 0.95, 1.0) : vec3(1.0, 0.9, 0.78);
       if (gallery) lamp = vec3(1.0, 0.93, 0.84);
       float lampI = lit * mix(0.55, 1.9, uNight);
-      vec3 daylight = lin(uSkyBottom) * (0.5 * uDay + 0.36 * uGolden + 0.015 * uNight);
+      vec3 daylight = uSkyBottom * (0.5 * uDay + 0.36 * uGolden + 0.015 * uNight);
 
       // ---- curtain / blind layer right behind the glass ----
       float cA = 0.06 + r3 * 0.36, cB = 0.06 + r4 * 0.34;          // curtain panel widths (fraction)
-      bool curtains = resi || flat || (hotel && r4 > 0.25);
+      bool curtains = resi || studio || (hotel && r4 > 0.25);
       bool blinds = !curtains && !gallery && r4 < 0.62;
       float drop = blinds ? H * (0.12 + 0.7 * r3 * r3) : 0.0;     // blind lowered from top
       vec3 cloth = r1 < 0.3 ? vec3(0.86, 0.82, 0.74) : r1 < 0.55 ? vec3(0.72, 0.7, 0.62) : r1 < 0.75 ? vec3(0.58, 0.66, 0.62) : r1 < 0.9 ? vec3(0.78, 0.62, 0.5) : vec3(0.42, 0.47, 0.56);
@@ -276,7 +276,7 @@
       }
       // ---- exterior glass: sky fresnel reflection on top of the interior ----
       vec3 R = reflect(V, vN);
-      vec3 sky = mix(lin(uSkyBottom), lin(uSkyTop), pow(clamp(R.y, 0.0, 1.0), 0.55));
+      vec3 sky = mix(uSkyBottom, uSkyTop, pow(clamp(R.y, 0.0, 1.0), 0.55));
       if (R.y < 0.0) sky *= 0.45; // street / opposite buildings reflect darker
       float F = 0.04 + 0.96 * pow(1.0 - clamp(dir.z, 0.0, 1.0), 5.0);
       col = mix(col, sky * mix(1.0, 0.35, uNight), clamp(F * 0.85 + 0.06, 0.0, 0.9));
