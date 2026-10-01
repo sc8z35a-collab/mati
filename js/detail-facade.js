@@ -310,7 +310,540 @@
       #include <fog_fragment>
     }`;
 
+  // ---------------------------------------------------------------------------
+  // 2. Static dressing: rooftop plant (water tanks, condensers, cubicles, masts,
+  //    dishes), rooftop & projecting signs with Japanese lettering, neon, aviation
+  //    beacons, lived-in balconies, rain streaks and street grime on the shells.
+  //    Everything rides existing exterior batches (no new draw calls) except five
+  //    small shared meshes created here.
+  // ---------------------------------------------------------------------------
+  const hash = (a, b = 0, c = 0) => {
+    let h = Math.imul(a * 73856093 ^ b * 19349663 ^ c * 83492791, 2654435761) >>> 0;
+    h ^= h >>> 15;
+    h = Math.imul(h, 2246822519) >>> 0;
+    h ^= h >>> 13;
+    return (h >>> 0) / 4294967296;
+  };
+  const FACES = [
+    [0, 1],
+    [0, -1],
+    [1, 0],
+    [-1, 0],
+  ];
+  function frame(b, face) {
+    const [nx, nz] = FACES[face],
+      half = nz ? b.d / 2 : b.w / 2,
+      len = nz ? b.w : b.d,
+      tx = nz,
+      tz = -nx;
+    return {
+      nx,
+      nz,
+      tx,
+      tz,
+      len,
+      ry: Math.atan2(nx, nz),
+      at: (u, y, out) => [b.x + nx * (half + out) + tx * u, y, b.z + nz * (half + out) + tz * u],
+    };
+  }
+  const BRANDS = {
+    office: [["MERIDIAN", "メリディアン保険"], ["TOKAI", "東海証券"], ["AOBA", "青葉電機"], ["SORA NET", "そら通信"], ["NAKANO", "中野建設"], ["KASUMI", "霞ホールディングス"]],
+    shop: [["CITY MARKET", "シティマーケット"], ["MIDORI", "ドラッグ ミドリ"], ["SAKURA", "家電のサクラ"], ["AKARI BOOKS", "書店 灯"], ["MACHI", "まちの百貨店"]],
+    hotel: [["NORTHLINE", "ノースライン ホテル"], ["HOTEL KOU", "ホテル 煌"], ["STAY 72", "ステイ セブンツー"]],
+    cafe: [["COMMON GROUNDS", "珈琲 こもれび"], ["KISSA", "喫茶 ひだまり"]],
+    gallery: [["FORM", "フォーム現代美術館"], ["ATELIER", "アトリエ 白"]],
+    residential: [["RESIDENCE", "レジデンス"]],
+  };
+  const VERTICAL = {
+    office: ["歯科", "税理士", "英会話", "整骨院"],
+    shop: ["薬", "書店", "眼鏡", "質"],
+    hotel: ["ホテル", "旅館"],
+    cafe: ["珈琲", "喫茶"],
+    gallery: ["画廊", "美術"],
+    residential: ["美容室", "ラーメン", "居酒屋", "そば"],
+  };
+  const NEON = ["#ff4f7a", "#46e0ff", "#ffd24a", "#7dff8a", "#ff7a3c", "#c77dff", "#ff5a4a"];
+  const FONT = "'Noto Sans JP','Noto Sans CJK JP','Hiragino Sans','Yu Gothic',sans-serif";
+
+  function makeStreakMaterial(T) {
+    const c = document.createElement("canvas");
+    c.width = 64;
+    c.height = 256;
+    const g = c.getContext("2d");
+    // Several thin runs of dirt, densest at the top (where water leaves the ledge).
+    let s = 91;
+    const rnd = () => ((s = (Math.imul(s, 1103515245) + 12345) >>> 0) / 4294967296);
+    for (let i = 0; i < 26; i++) {
+      const x = rnd() * 64,
+        w = 1 + rnd() * 4,
+        h = 60 + rnd() * 196,
+        a = 0.15 + rnd() * 0.45;
+      const grad = g.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, `rgba(255,255,255,${a})`);
+      grad.addColorStop(0.6, `rgba(255,255,255,${a * 0.45})`);
+      grad.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = grad;
+      g.fillRect(x, 0, w, h);
+    }
+    const top = g.createLinearGradient(0, 0, 0, 30);
+    top.addColorStop(0, "rgba(255,255,255,.55)");
+    top.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = top;
+    g.fillRect(0, 0, 64, 30);
+    const tex = new T.CanvasTexture(c);
+    return new T.MeshBasicMaterial({
+      map: tex,
+      color: "#222a27",
+      transparent: true,
+      opacity: 0.42,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    });
+  }
+  function makeGrimeMaterial(T) {
+    const c = document.createElement("canvas");
+    c.width = 256;
+    c.height = 64;
+    const g = c.getContext("2d");
+    const grad = g.createLinearGradient(0, 64, 0, 0);
+    grad.addColorStop(0, "rgba(255,255,255,.85)");
+    grad.addColorStop(0.35, "rgba(255,255,255,.35)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 256, 64);
+    // Splash speckles from rain and passing feet.
+    let s = 7;
+    const rnd = () => ((s = (Math.imul(s, 1103515245) + 12345) >>> 0) / 4294967296);
+    for (let i = 0; i < 900; i++) {
+      const y = 64 - Math.pow(rnd(), 2.2) * 60;
+      g.fillStyle = `rgba(255,255,255,${0.1 + rnd() * 0.35})`;
+      g.fillRect(rnd() * 256, y, 1 + rnd() * 2, 1 + rnd() * 2);
+    }
+    const tex = new T.CanvasTexture(c);
+    tex.wrapS = T.RepeatWrapping;
+    return new T.MeshBasicMaterial({
+      map: tex,
+      color: "#2b2a24",
+      transparent: true,
+      opacity: 0.5,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    });
+  }
+
+  // Sign atlas: rooftop boards (512x128 slots) and vertical blade signs (128x512 slots).
+  function drawRoofSign(g, x, y, w, h, brand, i) {
+    const dark = i % 3 !== 1;
+    g.fillStyle = dark ? ["#16302f", "#1d2433", "#2b1d1d", "#1d2b22"][i % 4] : "#f1ece0";
+    g.fillRect(x, y, w, h);
+    g.strokeStyle = dark ? "rgba(255,255,255,.35)" : "rgba(30,40,40,.5)";
+    g.lineWidth = 4;
+    g.strokeRect(x + 6, y + 6, w - 12, h - 12);
+    g.fillStyle = dark ? "#fff5dc" : "#1d3a38";
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.font = `900 52px ${FONT}`;
+    g.fillText(brand[1], x + w / 2, y + h * 0.42, w - 40);
+    g.font = `600 22px ${FONT}`;
+    g.fillStyle = dark ? "#9fd8c8" : "#7a5a32";
+    g.fillText(brand[0].split("").join(" "), x + w / 2, y + h * 0.8, w - 60);
+  }
+  function drawBlade(g, x, y, w, h, text, i) {
+    const bg = ["#b8262b", "#f2eadb", "#173a5c", "#1f4d36", "#f4c430", "#2a2a2a"][i % 6];
+    const light = bg === "#f2eadb" || bg === "#f4c430";
+    g.fillStyle = bg;
+    g.fillRect(x, y, w, h);
+    g.strokeStyle = light ? "#2a2a2a" : "#ffffff";
+    g.lineWidth = 5;
+    g.strokeRect(x + 8, y + 8, w - 16, h - 16);
+    g.fillStyle = light ? "#1d1d1d" : "#ffffff";
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    const chars = [...text],
+      size = Math.min(92, (h - 60) / chars.length);
+    g.font = `900 ${size}px ${FONT}`;
+    chars.forEach((ch, k) => g.fillText(ch, x + w / 2, y + 30 + size * (k + 0.5) + ((h - 60) - size * chars.length) / 2));
+  }
+
   const plugin = {
+    buildDressing(api) {
+      const T = api.THREE,
+        ex = api.exterior;
+      const streaks = [],
+        grime = [],
+        neon = [],
+        beacons = [],
+        quads = [];
+      this.balconySolids = new Map();
+      const roofAtlas = document.createElement("canvas");
+      roofAtlas.width = 2048;
+      roofAtlas.height = 2048;
+      const bladeAtlas = document.createElement("canvas");
+      bladeAtlas.width = 2048;
+      bladeAtlas.height = 1024;
+      const rg = roofAtlas.getContext("2d"),
+        bg = bladeAtlas.getContext("2d");
+      let roofSlot = 0,
+        bladeSlot = 0;
+      const S = this.stats;
+      Object.assign(S, { waterTanks: 0, condensers: 0, masts: 0, roofSigns: 0, bladeSigns: 0, neonTubes: 0, beacons: 0, balconyAC: 0, laundry: 0, streaks: 0, cubicles: 0 });
+
+      api.buildings.forEach((b, bi) => {
+        const { x, z, w, d, floors, type } = b;
+        const roof = BASE + floors * FLOOR,
+          rs = (b.solids[floors] ||= []);
+        const r = (k) => hash(bi + 11, k, floors);
+        const tall = floors >= 12;
+        const commercial = type === "office" || type === "shop" || type === "hotel" || type === "cafe";
+
+        // --- rooftop condensers in a row on a steel skid, with refrigerant lines to the core
+        {
+          const n = 3 + Math.floor(r(1) * 4),
+            cx0 = x + 5.5,
+            cz = z - d / 2 + 2.3;
+          ex.box("trim", cx0 + (n - 1) * 0.65, roof + 0.29, cz, n * 1.3 + 0.4, 0.14, 1.1, "#5d6764", 0, "roof");
+          for (let k = 0; k < n; k++) {
+            const ux = cx0 + k * 1.3,
+              tone = hash(bi, k, 3) < 0.5 ? "#d9dbd3" : "#c9ccc4";
+            ex.box("trim", ux, roof + 0.74, cz, 1.1, 0.78, 0.82, tone, 0, "roof");
+            ex.add("cylinder", "dark", ux - 0.14, roof + 0.74, cz + 0.415, 0.3, 0.02, 0.3, "#3a4442", Math.PI / 2, 0, 0, "roof");
+            for (let g = -2; g <= 2; g++)
+              ex.box("trim", ux - 0.14, roof + 0.74 + g * 0.11, cz + 0.43, 0.6, 0.012, 0.012, "#8b938f", 0, "roof");
+            ex.box("dark", ux + 0.38, roof + 0.74, cz + 0.415, 0.22, 0.6, 0.01, "#6e7774", 0, "roof");
+            ex.cylinder("trim", ux + 0.35, roof + 0.55, cz - 0.6, 0.03, 0.5, "#b08a5a", "roof");
+          }
+          ex.box("trim", cx0 + (n - 1) * 0.65 - 0.4, roof + 0.32, cz - 0.62, n * 1.3, 0.08, 0.2, "#7c8582", 0, "roof");
+          ex.box("trim", x + 3.6, roof + 0.32, (cz - 0.62 + z - d / 2 + 3.2) / 2, 0.2, 0.08, Math.abs(cz - 0.62 - (z - d / 2 + 3.2)) + 0.4, "#7c8582", 0, "roof");
+          rs.push({ x: cx0 + (n - 1) * 0.65, z: cz, w: (n * 1.3 + 0.4) / 2, d: 0.6, height: 1.2 });
+          S.condensers += n;
+        }
+
+        // --- elevated water tank (residential / hotel / shop and some offices)
+        if (type !== "gallery" && type !== "cafe" && (type !== "office" || r(2) < 0.4)) {
+          const tx = x + w / 2 - 4.6,
+            tz = z + 1.5,
+            legH = 2.2,
+            R = 1.25,
+            H = 2.5;
+          for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+            ex.box("trim", tx + dx * 0.95, roof + legH / 2 + 0.2, tz + dz * 0.95, 0.12, legH, 0.12, "#59625f", 0, "roof");
+            ex.beam("trim", [tx + dx * 0.95, roof + 0.35, tz + dz * 0.95], [tx - dx * 0.95, roof + legH, tz + dz * 0.95], 0.025, "#6a736f", "roof");
+          }
+          ex.box("trim", tx, roof + legH + 0.25, tz, 2.4, 0.1, 2.4, "#4f5755", 0, "roof");
+          ex.cylinder("render", tx, roof + legH + 0.3 + H / 2, tz, R, H, r(3) < 0.5 ? "#dfe2dc" : "#cfd8d6", "roof");
+          for (const yy of [0.5, 1.25, 2.0])
+            ex.cylinder("trim", tx, roof + legH + 0.3 + yy, tz, R + 0.03, 0.05, "#9aa39f", "roof");
+          ex.cylinder("render", tx, roof + legH + 0.3 + H + 0.12, tz, R * 0.75, 0.24, "#d6d9d3", "roof");
+          ex.cylinder("trim", tx, roof + legH + 0.3 + H + 0.3, tz, 0.28, 0.14, "#7c8582", "roof");
+          // ladder on the street side
+          for (const s2 of [-0.22, 0.22])
+            ex.box("trim", tx + s2, roof + (legH + H) / 2 + 0.2, tz + R + 0.12, 0.04, legH + H + 0.2, 0.04, "#aab2ae", 0, "roof");
+          for (let k = 0; k < 15; k++)
+            ex.box("trim", tx, roof + 0.45 + k * 0.32, tz + R + 0.12, 0.44, 0.025, 0.025, "#aab2ae", 0, "roof");
+          for (let k = 0; k < 6; k++)
+            ex.add("ring", "trim", tx, roof + legH + 1.2 + k * 0.33, tz + R + 0.3, 0.3, 0.3, 0.3, "#aab2ae", Math.PI / 2, 0, 0, "roof");
+          ex.cylinder("trim", tx - R - 0.1, roof + (legH + H) / 2, tz, 0.05, legH + H, "#8a9390", "roof");
+          ex.add("leaf", "contact", tx, roof + 0.215, tz, 3.6, 3.6, 1, "#ffffff", -Math.PI / 2, 0, 0, "roof");
+          rs.push({ x: tx, z: tz, w: 1.45, d: 1.45, height: 6 });
+          S.waterTanks++;
+        }
+
+        // --- electrical cubicle (キュービクル) with louvres and a warning plate
+        {
+          const cx = x - w / 2 + 3.4,
+            cz = z + 2.5;
+          ex.box("trim", cx, roof + 0.27, cz, 2.0, 0.12, 2.8, "#545c5a", 0, "roof");
+          ex.box("trim", cx, roof + 1.25, cz, 1.7, 1.85, 2.5, "#c8ccc2", 0, "roof");
+          ex.box("trim", cx, roof + 2.22, cz, 1.85, 0.08, 2.65, "#aeb3aa", 0, "roof");
+          for (let k = 0; k < 6; k++)
+            ex.box("dark", cx + 0.86, roof + 1.55 + k * 0.08, cz - 0.6, 0.01, 0.03, 0.9, "#59605e", 0, "roof");
+          ex.box("dark", cx + 0.86, roof + 1.25, cz + 0.45, 0.01, 1.5, 0.01, "#59605e", 0, "roof");
+          ex.box("sign", cx + 0.865, roof + 1.05, cz - 0.6, 0.005, 0.22, 0.32, "#f4c430", 0, "roof");
+          rs.push({ x: cx, z: cz, w: 1.0, d: 1.45, height: 2.4 });
+          S.cubicles++;
+        }
+
+        // --- masts, yagi antennas, dish and lightning rod on top of the lift core
+        {
+          const coreTop = roof + 4.4 + (type === "office" ? 2.1 : type === "gallery" ? 0.6 : 0),
+            mx = x + 2.4,
+            mz = z - d / 2 + 1.1,
+            mh = tall ? 9 : 5;
+          ex.cylinder("trim", mx, coreTop + mh / 2, mz, 0.06, mh, "#9aa3a0", "roof");
+          for (let k = 0; k < 3; k++) {
+            const yy = coreTop + mh * (0.45 + k * 0.18);
+            ex.box("trim", mx, yy, mz, 1.6 - k * 0.3, 0.025, 0.025, "#b8bfbc", r(10 + k) * Math.PI, "roof");
+            for (let e = -3; e <= 3; e++)
+              ex.box("trim", mx, yy, mz, 0.018, 0.018, 0.5 - Math.abs(e) * 0.05, "#b8bfbc", r(10 + k) * Math.PI, "roof");
+          }
+          ex.cylinder("trim", x - 1.5, coreTop + 1.4, z - d / 2 + 0.8, 0.03, 2.8, "#c9b27c", "roof");
+          ex.add("sphere", "trim", x - 1.9, coreTop + 0.75, z - d / 2 + 2.0, 0.55, 0.12, 0.55, "#e4e6e1", -0.9, 0.4 + r(4), 0, "roof");
+          ex.cylinder("trim", x - 1.9, coreTop + 0.35, z - d / 2 + 2.0, 0.04, 0.7, "#8a9390", "roof");
+          S.masts++;
+          if (tall) {
+            beacons.push([mx, coreTop + mh + 0.15, mz, 0.16]);
+            for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+              ex.cylinder("trim", x + dx * (w / 2 - 0.4), roof + 1.6, z + dz * (d / 2 - 0.4), 0.04, 0.75, "#8a9390", "roof");
+              beacons.push([x + dx * (w / 2 - 0.4), roof + 2.05, z + dz * (d / 2 - 0.4), 0.13]);
+            }
+          }
+        }
+
+        // --- rooftop billboard on a steel truss (commercial blocks)
+        if (commercial && !(tall && type === "office" && r(5) < 0.5)) {
+          const list = BRANDS[type],
+            brand = b.name.startsWith("THE ") || b.special ? [b.name.replace(/\s\d+$/, ""), b.jp] : list[Math.floor(r(6) * list.length)];
+          const sw = Math.min(16, w * 0.42),
+            sh = sw / 4,
+            sx = x + w * 0.16,
+            sz = z + d / 2 - 0.55,
+            y0 = roof + 1.9;
+          const slot = roofSlot++ % 64,
+            ax = (slot % 4) * 512,
+            ay = Math.floor(slot / 4) * 128;
+          drawRoofSign(rg, ax, ay, 512, 128, brand, bi);
+          quads.push({ atlas: 0, c: [sx, y0 + sh / 2, sz + 0.09], t: [1, 0, 0], u: [0, 1, 0], n: [0, 0, 1], w: sw, h: sh, uv: [ax / 2048, 1 - (ay + 128) / 2048, (ax + 512) / 2048, 1 - ay / 2048] });
+          ex.box("dark", sx, y0 + sh / 2, sz, sw + 0.2, sh + 0.2, 0.16, "#2a3230", 0, "roof");
+          const posts = Math.max(3, Math.round(sw / 3.2));
+          for (let k = 0; k < posts; k++) {
+            const px = sx - sw / 2 + 0.4 + (k * (sw - 0.8)) / (posts - 1);
+            ex.box("trim", px, (roof + 0.2 + y0) / 2 + sh / 2, sz - 0.14, 0.12, y0 - roof + sh - 0.2, 0.12, "#5c6562", 0, "roof");
+            ex.beam("trim", [px, roof + 0.25, sz - 1.25], [px, y0 + sh * 0.6, sz - 0.18], 0.04, "#5c6562", "roof");
+            ex.box("trim", px, roof + 0.25, sz - 0.7, 0.14, 0.08, 1.2, "#4d5553", 0, "roof");
+            rs.push({ x: px, z: sz - 0.7, w: 0.12, d: 0.6, height: 1.2 });
+          }
+          for (const yy of [roof + 0.9, y0 - 0.08])
+            ex.box("trim", sx, yy, sz - 0.14, sw, 0.08, 0.08, "#5c6562", 0, "roof");
+          // gooseneck flood lights over the board
+          for (let k = 0; k < 4; k++) {
+            const lx = sx - sw * 0.375 + (k * sw) / 4;
+            ex.beam("trim", [lx, y0 + sh + 0.05, sz - 0.05], [lx, y0 + sh + 0.45, sz + 0.75], 0.025, "#3a4240", "roof");
+            ex.box("dark", lx, y0 + sh + 0.45, sz + 0.8, 0.32, 0.12, 0.22, "#3a4240", 0, "roof");
+            ex.box("glow", lx, y0 + sh + 0.385, sz + 0.82, 0.26, 0.012, 0.16, "#ffffff", 0, "roof");
+          }
+          const nc = NEON[bi % NEON.length];
+          const o = sz + 0.2;
+          neon.push([sx, y0 - 0.05, o, sw + 0.1, 0.05, 0.05, nc], [sx, y0 + sh + 0.05, o, sw + 0.1, 0.05, 0.05, nc], [sx - sw / 2 - 0.05, y0 + sh / 2, o, 0.05, sh + 0.1, 0.05, nc], [sx + sw / 2 + 0.05, y0 + sh / 2, o, 0.05, sh + 0.1, 0.05, nc]);
+          S.roofSigns++;
+        }
+
+        // --- projecting blade sign (袖看板) at the street corner of the entrance facade
+        if (type !== "residential" || r(7) < 0.45) {
+          const words = VERTICAL[type],
+            text = words[Math.floor(r(8) * words.length)];
+          const bx = x + w / 2 - 1.3,
+            by = BASE + FLOOR + 0.8,
+            bh = Math.min(7.5, FLOOR * 1.35),
+            bwid = 1.15,
+            bz = z + d / 2 + 0.35 + bwid / 2;
+          const slot = bladeSlot++ % 32,
+            ax = (slot % 16) * 128,
+            ay = Math.floor(slot / 16) * 512;
+          drawBlade(bg, ax, ay, 128, 512, text, bi);
+          const uv = [ax / 2048, 1 - (ay + 512) / 1024, (ax + 128) / 2048, 1 - ay / 1024];
+          ex.box("trim", bx, by + bh / 2, bz, 0.22, bh + 0.16, bwid + 0.12, "#3b4442", 0, "facade");
+          quads.push({ atlas: 1, c: [bx + 0.115, by + bh / 2, bz], t: [0, 0, -1], u: [0, 1, 0], n: [1, 0, 0], w: bwid, h: bh, uv });
+          quads.push({ atlas: 1, c: [bx - 0.115, by + bh / 2, bz], t: [0, 0, 1], u: [0, 1, 0], n: [-1, 0, 0], w: bwid, h: bh, uv });
+          for (const yy of [by + 0.4, by + bh - 0.4])
+            ex.box("trim", bx, yy, z + d / 2 + 0.2, 0.08, 0.08, 0.5, "#59625f", 0, "facade");
+          const nc = NEON[(bi + 3) % NEON.length];
+          for (const s2 of [-1, 1]) {
+            neon.push([bx + s2 * 0.13, by - 0.04, bz, 0.03, 0.04, bwid + 0.06, nc]);
+            neon.push([bx + s2 * 0.13, by + bh + 0.04, bz, 0.03, 0.04, bwid + 0.06, nc]);
+            neon.push([bx + s2 * 0.13, by + bh / 2, bz - bwid / 2 - 0.04, 0.03, bh + 0.1, 0.04, nc]);
+            neon.push([bx + s2 * 0.13, by + bh / 2, bz + bwid / 2 + 0.04, 0.03, bh + 0.1, 0.04, nc]);
+          }
+          S.bladeSigns++;
+        }
+
+        // --- lived-in balconies: condenser units, drying racks with laundry, stools
+        if (type === "residential" || type === "hotel")
+          for (let f = 2; f < floors; f += 2)
+            for (const side of [-1, 1]) {
+              const u = side * w * 0.27,
+                bw = w * 0.32,
+                y = BASE + f * FLOOR + 0.11,
+                zz = z + d / 2,
+                list = [];
+              const hb = (k) => hash(bi * 7 + f, side + 5, k);
+              if (hb(1) < 0.78) {
+                const ax = x + u - bw / 2 + 0.75;
+                ex.box("trim", ax, y + 0.36, zz + 0.42, 0.82, 0.62, 0.3, "#dcded7", 0, "facade");
+                ex.add("cylinder", "dark", ax - 0.1, y + 0.36, zz + 0.575, 0.22, 0.012, 0.22, "#3e4644", Math.PI / 2, 0, 0, "near");
+                for (let g = -2; g <= 2; g++) ex.box("trim", ax - 0.1, y + 0.36 + g * 0.08, zz + 0.585, 0.44, 0.01, 0.01, "#9aa29e", 0, "near");
+                ex.box("trim", ax + 0.2, y + 0.82, zz + 0.32, 0.05, 0.3, 0.05, "#d7d3c7", 0, "near");
+                ex.box("trim", ax, y + 0.03, zz + 0.42, 0.7, 0.06, 0.26, "#6b7370", 0, "near");
+                list.push({ x: ax, z: zz + 0.42, w: 0.45, d: 0.2, height: 0.8 });
+                S.balconyAC++;
+              }
+              if (type === "residential" && hb(2) < 0.5) {
+                const r0 = x + u - bw / 2 + 1.9,
+                  r1 = r0 + 2.3,
+                  rz = zz + 1.75;
+                for (const px of [r0, r1]) {
+                  ex.box("trim", px, y + 0.8, rz, 0.04, 1.6, 0.04, "#c9cfcc", 0, "near");
+                  ex.box("trim", px, y + 0.02, rz, 0.06, 0.04, 0.55, "#c9cfcc", 0, "near");
+                }
+                ex.box("trim", (r0 + r1) / 2, y + 1.56, rz, r1 - r0, 0.03, 0.03, "#c9cfcc", 0, "near");
+                const n = 2 + Math.floor(hb(3) * 4);
+                for (let k = 0; k < n; k++) {
+                  const lw = 0.38 + hb(10 + k) * 0.3,
+                    lh = 0.45 + hb(20 + k) * 0.45,
+                    lx = r0 + 0.3 + (k + 0.5) * ((r1 - r0 - 0.6) / n);
+                  ex.add("box", "fabric", lx, y + 1.55 - lh / 2, rz, lw, lh, 0.02, ["#f1efe8", "#9cc0d6", "#e7b6a5", "#c9d7a8", "#f3d27a", "#d8d2e6", "#ffffff"][Math.floor(hb(30 + k) * 7)], 0, (hb(40 + k) - 0.5) * 0.25, 0, "near");
+                }
+                list.push({ x: (r0 + r1) / 2, z: rz, w: 1.2, d: 0.12, height: 1.7 });
+                S.laundry++;
+              }
+              if (hb(4) < 0.35) {
+                const sx = x + u + bw / 2 - 2.4,
+                  sz = zz + 1.5;
+                ex.cylinder("timber", sx, y + 0.45, sz, 0.2, 0.04, "#a77d52", "near");
+                for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]])
+                  ex.box("trim", sx + dx * 0.12, y + 0.22, sz + dz * 0.12, 0.025, 0.44, 0.025, "#3d4543", 0, "near");
+                list.push({ x: sx, z: sz, w: 0.22, d: 0.22, height: 0.5 });
+              }
+              if (list.length) {
+                const key = b.id + ":" + f;
+                this.balconySolids.set(key, (this.balconySolids.get(key) || []).concat(list));
+              }
+            }
+
+        // --- weathering: rain streaks below every floor band, down the corner columns,
+        //     and splash grime on the plinths
+        for (let face = 0; face < 4; face++) {
+          const F = frame(b, face);
+          for (let f = 1; f < floors; f++) {
+            const yb = BASE + f * FLOOR + 0.07;
+            const k = Math.floor(hash(bi, face * 97 + f, 5) * 4);
+            for (let n = 0; n < k; n++) {
+              const u = (hash(bi, face * 131 + f, 10 + n) - 0.5) * (F.len - 3),
+                sw = 0.35 + hash(bi, f, 20 + n) * 0.9,
+                sh = 0.6 + Math.pow(hash(bi, f, 30 + n), 2) * 2.6;
+              streaks.push([...F.at(u, yb - sh / 2, 0.075), sw, sh, F.ry]);
+            }
+          }
+          for (const e of [-1, 1]) {
+            const sh = 3 + hash(bi, face, 40 + e) * 9;
+            streaks.push([...F.at(e * (F.len / 2), roof - sh / 2 + 0.7, 0.285), 0.5, sh, F.ry]);
+          }
+          if (face !== 0) grime.push([...F.at(0, 0.62, 0.512), F.len - 0.3, 0.6, F.ry]);
+          else
+            for (const e of [-1, 1]) {
+              const segment = F.len / 2 - 3.8;
+              grime.push([...F.at(e * (3.8 + segment / 2), 0.62, 0.05), segment, 0.55, F.ry]);
+            }
+        }
+      });
+      S.streaks = streaks.length;
+      S.neonTubes = neon.length;
+      S.beacons = beacons.length;
+
+      // ---- shared meshes ----
+      const dummy = new T.Object3D();
+      const instanced = (geo, material, rows, name, write) => {
+        const mesh = new T.InstancedMesh(geo, material, Math.max(1, rows.length));
+        rows.forEach((row, i) => {
+          write(row);
+          dummy.updateMatrix();
+          mesh.setMatrixAt(i, dummy.matrix);
+        });
+        mesh.count = rows.length;
+        mesh.frustumCulled = false;
+        mesh.raycast = () => {};
+        mesh.name = name;
+        mesh.userData.detailFacade = true;
+        api.scene.add(mesh);
+        return mesh;
+      };
+      const plane = new T.PlaneGeometry(1, 1);
+      this.streakMesh = instanced(plane, makeStreakMaterial(T), streaks, "detail-facade-streaks", (s2) => {
+        dummy.position.set(s2[0], s2[1], s2[2]);
+        dummy.rotation.set(0, s2[5], 0);
+        dummy.scale.set(s2[3], s2[4], 1);
+      });
+      this.streakMesh.renderOrder = 2;
+      const grimeMat = makeGrimeMaterial(T);
+      this.grimeMesh = instanced(plane, grimeMat, grime, "detail-facade-grime", (s2) => {
+        dummy.position.set(s2[0], s2[1], s2[2]);
+        dummy.rotation.set(0, s2[5], 0);
+        dummy.scale.set(s2[3], s2[4], 1);
+      });
+      this.grimeMesh.renderOrder = 2;
+      this.neonMaterial = new T.MeshBasicMaterial({ color: "#ffffff" });
+      this.neonMesh = instanced(new T.BoxGeometry(1, 1, 1), this.neonMaterial, neon, "detail-facade-neon", (s2) => {
+        dummy.position.set(s2[0], s2[1], s2[2]);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(s2[3], s2[4], s2[5]);
+      });
+      const color = new T.Color();
+      neon.forEach((s2, i) => this.neonMesh.setColorAt(i, color.set(s2[6])));
+      if (this.neonMesh.instanceColor) this.neonMesh.instanceColor.needsUpdate = true;
+      this.beaconMaterial = new T.MeshBasicMaterial({ color: "#ff2a1a" });
+      this.beaconMesh = instanced(new T.IcosahedronGeometry(1, 1), this.beaconMaterial, beacons, "detail-facade-beacons", (s2) => {
+        dummy.position.set(s2[0], s2[1], s2[2]);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.setScalar(s2[3]);
+      });
+      // Sign faces: two merged meshes (one per atlas), emissive at night.
+      this.signMaterials = [];
+      [roofAtlas, bladeAtlas].forEach((canvas, a) => {
+        const list = quads.filter((q) => q.atlas === a);
+        if (!list.length) return;
+        const pos = [],
+          nor = [],
+          uvs = [],
+          idx = [];
+        list.forEach((q, i) => {
+          const corner = (sx, sy) => [0, 1, 2].map((k) => q.c[k] + q.t[k] * sx * q.w * 0.5 + q.u[k] * sy * q.h * 0.5);
+          pos.push(...corner(-1, -1), ...corner(1, -1), ...corner(1, 1), ...corner(-1, 1));
+          for (let k = 0; k < 4; k++) nor.push(...q.n);
+          const [u0, v0, u1, v1] = q.uv;
+          uvs.push(u0, v0, u1, v0, u1, v1, u0, v1);
+          idx.push(i * 4, i * 4 + 1, i * 4 + 2, i * 4, i * 4 + 2, i * 4 + 3);
+        });
+        const geo = new T.BufferGeometry();
+        geo.setAttribute("position", new T.Float32BufferAttribute(pos, 3));
+        geo.setAttribute("normal", new T.Float32BufferAttribute(nor, 3));
+        geo.setAttribute("uv", new T.Float32BufferAttribute(uvs, 2));
+        geo.setIndex(idx);
+        const tex = new T.CanvasTexture(canvas);
+        tex.colorSpace = T.SRGBColorSpace;
+        tex.anisotropy = Math.min(8, api.renderer.capabilities.getMaxAnisotropy());
+        const m = new T.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: "#ffffff", emissiveIntensity: 0.12, roughness: 0.55, metalness: 0 });
+        const mesh = new T.Mesh(geo, m);
+        mesh.raycast = () => {};
+        mesh.name = "detail-facade-signs-" + a;
+        mesh.userData.detailFacade = true;
+        mesh.frustumCulled = false;
+        api.scene.add(mesh);
+        this.signMaterials.push(m);
+      });
+      this.applyLights(api.getTime(), true);
+    },
+    applyLights(mode, snap) {
+      const night = mode === "night",
+        golden = mode === "golden";
+      this.lightTarget = { sign: night ? 1.15 : golden ? 0.3 : 0.08, neon: night ? 3.2 : golden ? 1.3 : 0.75 };
+      if (snap || !this.light) this.light = { ...this.lightTarget };
+    },
+    updateLights(dt, clock) {
+      if (!this.neonMaterial) return;
+      const k = Math.min(1, dt * 0.8);
+      for (const key in this.lightTarget) this.light[key] += (this.lightTarget[key] - this.light[key]) * k;
+      for (const m of this.signMaterials) m.emissiveIntensity = this.light.sign;
+      // A neon transformer buzz: very slight flicker, plus a rare stutter.
+      const flick = 1 - 0.04 * Math.sin(clock * 61) * Math.sin(clock * 17) - (Math.sin(clock * 0.7) > 0.995 ? 0.5 : 0);
+      this.neonMaterial.color.setScalar(this.light.neon * flick);
+      const night = this.light.neon > 2;
+      const pulse = 0.5 + 0.5 * Math.sin(clock * 2.1);
+      this.beaconMaterial.color.setRGB(1, 0.16, 0.1).multiplyScalar(night ? 0.6 + 3.4 * pulse * pulse : 1.2);
+    },
+
     name: "facade",
     owner: "C",
     stats: { windowBays: 0, buildings: 0 },
@@ -399,11 +932,18 @@
     },
     timeChanged(api, mode) {
       this.applyTime(mode, false);
+      this.applyLights(mode, false);
+    },
+    floorLoaded(api, b, f) {
+      // interior() rebuilds b.solids[f] on every load; re-add the balcony furniture.
+      const list = this.balconySolids?.get(b.id + ":" + f);
+      if (list && b.solids[f]) b.solids[f].push(...list.map((s) => ({ ...s })));
     },
     update(dt, api) {
       if (!this.uniforms) return;
       const u = this.uniforms;
       u.uClock.value += dt;
+      this.updateLights(dt, u.uClock.value);
       const k = Math.min(1, dt * 0.8);
       for (const key in this.target) u[key].value += (this.target[key] - u[key].value) * k;
       const p = api.player,
@@ -423,6 +963,12 @@
           return hits.length === 0;
         })(),
         windowsNoShadow: !!m && !m.castShadow,
+        rooftopPlant: this.stats.waterTanks > 10 && this.stats.condensers > 150 && this.stats.cubicles === api.buildings.length,
+        signsBuilt: this.stats.roofSigns > 15 && this.stats.bladeSigns > 30 && this.signMaterials.length === 2,
+        neonAndBeacons: this.neonMesh.count === this.stats.neonTubes && this.beaconMesh.count === this.stats.beacons && this.stats.beacons > 20,
+        weathering: this.streakMesh.count > 1000 && this.grimeMesh.count === api.buildings.length * 5,
+        balconiesLivedIn: this.stats.balconyAC > 100 && this.balconySolids.size > 50,
+        roofSolidsRegistered: api.buildings.every((b) => (b.solids[b.floors] || []).length >= 20),
       };
     },
     snapshot() {
