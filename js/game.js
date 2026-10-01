@@ -8,6 +8,24 @@
   }
   const T = THREE;
   EvercityLighting.installSunFilter(T);
+  // Detail plugins (js/detail-*.js) register into window.EvercityDetails.
+  // Each hook is isolated: one failing plugin logs an error but never stops the city.
+  const detailPlugins = (window.EvercityDetails || []).filter(
+    (d) => d && typeof d === "object",
+  );
+  function detailHook(name, ...args) {
+    for (const d of detailPlugins) {
+      if (typeof d[name] !== "function") continue;
+      try {
+        d[name](...args);
+      } catch (error) {
+        if (!d.failed?.[name])
+          console.error(`EVERCITY detail plugin ${d.name}.${name} failed`, error);
+        (d.failed ||= {})[name] = true;
+      }
+    }
+  }
+  let detailApi = null;
   let renderer;
   try {
     renderer = new T.WebGLRenderer({
@@ -686,6 +704,7 @@
       }
     }
     if (!detailedFloor) commercialObjects(b, floor, theme);
+    if (detailApi) detailHook("interior", detailApi, b, floor, theme);
     furnishingBuilding = null;
   }
   function commercialObjects(b, f, theme) {
@@ -1795,6 +1814,7 @@
       batchActiveInterior();
       hideResidencePreview(b, f);
     }
+    detailHook("floorLoaded", detailApi, b, f, activeInterior);
     player.x = b.x;
     player.z = b.z - b.d / 2 + (f === b.floors ? 10 : 8.5);
     player.y = BASE + f * FLOOR + 1.7;
@@ -2601,6 +2621,7 @@
     $("weather-icon").textContent = night ? "☾" : "☀";
     $("weather-label").textContent = night ? "晴れ / 19°C" : "晴れ / 24°C";
     environment?.apply();
+    if (detailApi?.environment) detailHook("timeChanged", detailApi, mode);
   }
   function teleport(b) {
     // Arriving somewhere new ends the photo session and restores the walking lens.
@@ -3126,6 +3147,7 @@
       .sub(sun.target.position)
       .normalize();
     exterior?.update(dt, player, timeMode);
+    if (detailApi?.environment) detailHook("update", dt, detailApi, dialogOpen());
     if (trafficSystem && frameCount % 8 === 0) updateTrafficHUD();
     if (now - lastMap > 180) {
       updateLocation();
@@ -3478,6 +3500,13 @@
       },
     }),
     exteriorTest: () => exterior?.selfTest(),
+    details: () =>
+      detailPlugins.map((d) => ({
+        name: d.name,
+        owner: d.owner,
+        failed: d.failed || null,
+        stats: typeof d.snapshot === "function" ? d.snapshot() : null,
+      })),
     selfTest: () => {
       const b = buildings.find((v) => v.name === "ATLAS TOWER");
       const old = { ...player };
@@ -3590,6 +3619,53 @@
         obstacle,
         sun,
       });
+      detailApi = {
+        THREE: T,
+        scene,
+        renderer,
+        camera,
+        player,
+        sun,
+        ambient,
+        skyUniforms,
+        materials,
+        mat,
+        exterior,
+        buildings,
+        parks,
+        landmarks,
+        obstacle,
+        box,
+        cyl,
+        ball,
+        part,
+        solid: furnitureSolid,
+        plant,
+        chair,
+        table,
+        sofa,
+        bookcase,
+        label,
+        toast,
+        BASE,
+        FLOOR,
+        GRID,
+        active: () => !!activeBuildGroup,
+        group: () => activeBuildGroup,
+        floorContext: () => ({ building: furnishingBuilding, floor: furnishingFloor }),
+        getTime: () => timeMode,
+        weather: () => environment?.weather || "clear",
+        quality: () => exterior?.quality || "balanced",
+        indoor: () => !!currentBuilding && player.floor < currentBuilding.floors,
+        currentBuilding: () => currentBuilding,
+        vehicles,
+        people,
+        // Filled in after the remaining systems exist.
+        environment: null,
+        stories: null,
+        trafficSystem: null,
+        lightingSystem: null,
+      };
       createCity();
       services = new EvercityServices({ THREE: T, scene, obstacle, teleport, toast, renderer });
       landmarks.push(...services.sites);
@@ -3598,6 +3674,7 @@
       buildings.forEach((b) => exterior.building(b));
       parks.forEach((p) => exterior.park(p));
       exterior.waterfront();
+      detailHook("city", detailApi);
       exterior.visibility = visibility;
       exterior.flush();
       visibility.setBuildings(buildings, BASE, FLOOR);
@@ -3723,6 +3800,13 @@
         updateActorStatus();
       };
       updateActorStatus();
+      Object.assign(detailApi, {
+        environment,
+        stories,
+        trafficSystem,
+        lightingSystem,
+      });
+      detailHook("ready", detailApi);
       camera.position.set(player.x, player.y, player.z);
       camera.rotation.set(player.pitch, player.yaw, 0);
       const launchParams = new URLSearchParams(location.search);
@@ -3825,6 +3909,16 @@
           "EVERCITY weather tests",
           JSON.stringify(environment.selfTest()),
         );
+        for (const d of detailPlugins)
+          if (typeof d.selfTest === "function")
+            try {
+              console.info(
+                `EVERCITY detail ${d.name} tests`,
+                JSON.stringify(d.selfTest(detailApi)),
+              );
+            } catch (error) {
+              console.error(`EVERCITY detail ${d.name} selfTest failed`, error);
+            }
       }
       if (
         params.get("test") === "1" &&
