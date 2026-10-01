@@ -484,7 +484,7 @@
       roofAtlas.height = 2048;
       const bladeAtlas = document.createElement("canvas");
       bladeAtlas.width = 2048;
-      bladeAtlas.height = 1024;
+      bladeAtlas.height = 2048;
       const rg = roofAtlas.getContext("2d"),
         bg = bladeAtlas.getContext("2d");
       let roofSlot = 0,
@@ -502,7 +502,7 @@
 
         // --- rooftop condensers in a row on a steel skid, with refrigerant lines to the core
         {
-          const n = 3 + Math.floor(r(1) * 4),
+          const n = 3 + Math.floor(r(1) * 3),
             cx0 = x + 5.5,
             cz = z - d / 2 + 2.3;
           ex.box("trim", cx0 + (n - 1) * 0.65, roof + 0.29, cz, n * 1.3 + 0.4, 0.14, 1.1, "#5d6764", 0, "roof");
@@ -569,9 +569,12 @@
 
         // --- masts, yagi antennas, dish and lightning rod on top of the lift core
         {
-          const coreTop = roof + 4.4 + (type === "office" ? 2.1 : type === "gallery" ? 0.6 : 0),
-            mx = x + 2.4,
-            mz = z - d / 2 + 1.1,
+          // Base heights follow the lift-core cap of each roof type (office = stepped crown,
+          // gallery = tilted slab) so nothing floats or sinks.
+          const top = (dx) => roof + (type === "office" ? 4.825 : type === "gallery" ? 5.0 + 0.151 * dx : 4.4);
+          const mx = x + 2.4,
+            mz = z - d / 2 + 0.55,
+            coreTop = top(2.4),
             mh = tall ? 9 : 5;
           ex.cylinder("trim", mx, coreTop + mh / 2, mz, 0.06, mh, "#9aa3a0", "roof");
           for (let k = 0; k < 3; k++) {
@@ -580,9 +583,9 @@
             for (let e = -3; e <= 3; e++)
               ex.box("trim", mx, yy, mz, 0.018, 0.018, 0.5 - Math.abs(e) * 0.05, "#b8bfbc", r(10 + k) * Math.PI, "roof");
           }
-          ex.cylinder("trim", x - 1.5, coreTop + 1.4, z - d / 2 + 0.8, 0.03, 2.8, "#c9b27c", "roof");
-          ex.add("sphere", "trim", x - 1.9, coreTop + 0.75, z - d / 2 + 2.0, 0.55, 0.12, 0.55, "#e4e6e1", -0.9, 0.4 + r(4), 0, "roof");
-          ex.cylinder("trim", x - 1.9, coreTop + 0.35, z - d / 2 + 2.0, 0.04, 0.7, "#8a9390", "roof");
+          ex.cylinder("trim", x - 1.5, top(-1.5) + 1.4, z - d / 2 + 0.55, 0.03, 2.8, "#c9b27c", "roof");
+          ex.add("sphere", "trim", x - 3.0, top(-3.0) + 0.75, z - d / 2 + 2.0, 0.55, 0.12, 0.55, "#e4e6e1", -0.9, 0.4 + r(4), 0, "roof");
+          ex.cylinder("trim", x - 3.0, top(-3.0) + 0.35, z - d / 2 + 2.0, 0.04, 0.7, "#8a9390", "roof");
           S.masts++;
           if (tall) {
             beacons.push([mx, coreTop + mh + 0.15, mz, 0.16]);
@@ -600,21 +603,21 @@
           const sw = Math.min(16, w * 0.42),
             sh = sw / 4,
             sx = x + w * 0.16,
-            sz = z + d / 2 - 0.55,
+            sz = z + d / 2 - 0.35,
             y0 = roof + 1.9;
           const slot = roofSlot++ % 64,
             ax = (slot % 4) * 512,
             ay = Math.floor(slot / 4) * 128;
-          drawRoofSign(rg, ax, ay, 512, 128, brand, bi);
+          if (roofSlot <= 64) drawRoofSign(rg, ax, ay, 512, 128, brand, bi);
           quads.push({ atlas: 0, c: [sx, y0 + sh / 2, sz + 0.09], t: [1, 0, 0], u: [0, 1, 0], n: [0, 0, 1], w: sw, h: sh, uv: [ax / 2048, 1 - (ay + 128) / 2048, (ax + 512) / 2048, 1 - ay / 2048] });
           ex.box("dark", sx, y0 + sh / 2, sz, sw + 0.2, sh + 0.2, 0.16, "#2a3230", 0, "roof");
           const posts = Math.max(3, Math.round(sw / 3.2));
           for (let k = 0; k < posts; k++) {
             const px = sx - sw / 2 + 0.4 + (k * (sw - 0.8)) / (posts - 1);
             ex.box("trim", px, (roof + 0.2 + y0) / 2 + sh / 2, sz - 0.14, 0.12, y0 - roof + sh - 0.2, 0.12, "#5c6562", 0, "roof");
-            ex.beam("trim", [px, roof + 0.25, sz - 1.25], [px, y0 + sh * 0.6, sz - 0.18], 0.04, "#5c6562", "roof");
-            ex.box("trim", px, roof + 0.25, sz - 0.7, 0.14, 0.08, 1.2, "#4d5553", 0, "roof");
-            rs.push({ x: px, z: sz - 0.7, w: 0.12, d: 0.6, height: 1.2 });
+            ex.beam("trim", [px, roof + 0.25, sz - 0.85], [px, y0 + sh * 0.6, sz - 0.18], 0.04, "#5c6562", "roof");
+            ex.box("trim", px, roof + 0.25, sz - 0.5, 0.14, 0.08, 0.8, "#4d5553", 0, "roof");
+            rs.push({ x: px, z: sz - 0.5, w: 0.12, d: 0.4, height: 1.2 });
           }
           for (const yy of [roof + 0.9, y0 - 0.08])
             ex.box("trim", sx, yy, sz - 0.14, sw, 0.08, 0.08, "#5c6562", 0, "roof");
@@ -640,11 +643,11 @@
             bh = Math.min(7.5, FLOOR * 1.35),
             bwid = 1.15,
             bz = z + d / 2 + 0.35 + bwid / 2;
-          const slot = bladeSlot++ % 32,
+          const slot = bladeSlot++ % 64,
             ax = (slot % 16) * 128,
             ay = Math.floor(slot / 16) * 512;
-          drawBlade(bg, ax, ay, 128, 512, text, bi);
-          const uv = [ax / 2048, 1 - (ay + 512) / 1024, (ax + 128) / 2048, 1 - ay / 1024];
+          if (bladeSlot <= 64) drawBlade(bg, ax, ay, 128, 512, text, bi);
+          const uv = [ax / 2048, 1 - (ay + 512) / 2048, (ax + 128) / 2048, 1 - ay / 2048];
           ex.box("trim", bx, by + bh / 2, bz, 0.22, bh + 0.16, bwid + 0.12, "#3b4442", 0, "facade");
           quads.push({ atlas: 1, c: [bx + 0.115, by + bh / 2, bz], t: [0, 0, -1], u: [0, 1, 0], n: [1, 0, 0], w: bwid, h: bh, uv });
           quads.push({ atlas: 1, c: [bx - 0.115, by + bh / 2, bz], t: [0, 0, 1], u: [0, 1, 0], n: [-1, 0, 0], w: bwid, h: bh, uv });
@@ -713,30 +716,35 @@
               }
             }
 
-        // --- weathering: rain streaks below every floor band, down the corner columns,
-        //     and splash grime on the plinths
+        // --- weathering: dirt washed down the floor bands (only the opaque masonry, never
+        //     the glass), long runs down the corner columns and brick piers, and splash grime
+        //     on the three solid plinths.  The glazed entrance front stays clean.
+        const balconyFace = type === "residential" || type === "hotel";
         for (let face = 0; face < 4; face++) {
           const F = frame(b, face);
           for (let f = 1; f < floors; f++) {
-            const yb = BASE + f * FLOOR + 0.07;
-            const k = Math.floor(hash(bi, face * 97 + f, 5) * 4);
+            const bandTop = BASE + f * FLOOR + 0.85;
+            const k = 1 + Math.floor(hash(bi, face * 97 + f, 5) * 4);
             for (let n = 0; n < k; n++) {
               const u = (hash(bi, face * 131 + f, 10 + n) - 0.5) * (F.len - 3),
-                sw = 0.35 + hash(bi, f, 20 + n) * 0.9,
-                sh = 0.6 + Math.pow(hash(bi, f, 30 + n), 2) * 2.6;
-              streaks.push([...F.at(u, yb - sh / 2, 0.075), sw, sh, F.ry]);
+                sw = 0.3 + hash(bi, f, 20 + n) * 1.1,
+                sh = 0.25 + hash(bi, f, 30 + n) * 0.53;
+              if (face === 0 && balconyFace && f % 2 === 0 && Math.min(Math.abs(u - w * 0.27), Math.abs(u + w * 0.27)) < 1.05 + sw / 2) continue;
+              streaks.push([...F.at(u, bandTop - sh / 2, 0.218), sw, sh, F.ry]);
             }
+            // brick piers on residential side / back faces (same rule as exterior.building)
+            if (type === "residential" && face !== 0)
+              for (let u = -F.len / 2 + 2; u < F.len / 2 - 1; u += 5.4)
+                if (Math.round((u + F.len / 2) / 3.6) % 2 === 0 && hash(bi, face * 53 + f, Math.round(u * 10)) < 0.45) {
+                  const sh = 0.8 + hash(bi, f, Math.round(u * 7)) * 3.4;
+                  streaks.push([...F.at(u, BASE + f * FLOOR + 5.07 - sh / 2, 0.445), 0.5, sh, F.ry]);
+                }
           }
           for (const e of [-1, 1]) {
             const sh = 3 + hash(bi, face, 40 + e) * 9;
             streaks.push([...F.at(e * (F.len / 2), roof - sh / 2 + 0.7, 0.285), 0.5, sh, F.ry]);
           }
           if (face !== 0) grime.push([...F.at(0, 0.62, 0.512), F.len - 0.3, 0.6, F.ry]);
-          else
-            for (const e of [-1, 1]) {
-              const segment = F.len / 2 - 3.8;
-              grime.push([...F.at(e * (3.8 + segment / 2), 0.62, 0.05), segment, 0.55, F.ry]);
-            }
         }
       });
       S.streaks = streaks.length;
@@ -966,7 +974,7 @@
         rooftopPlant: this.stats.waterTanks > 10 && this.stats.condensers > 150 && this.stats.cubicles === api.buildings.length,
         signsBuilt: this.stats.roofSigns > 15 && this.stats.bladeSigns > 30 && this.signMaterials.length === 2,
         neonAndBeacons: this.neonMesh.count === this.stats.neonTubes && this.beaconMesh.count === this.stats.beacons && this.stats.beacons > 20,
-        weathering: this.streakMesh.count > 1000 && this.grimeMesh.count === api.buildings.length * 5,
+        weathering: this.streakMesh.count > 3000 && this.grimeMesh.count === api.buildings.length * 3,
         balconiesLivedIn: this.stats.balconyAC > 100 && this.balconySolids.size > 50,
         roofSolidsRegistered: api.buildings.every((b) => (b.solids[b.floors] || []).length >= 20),
       };
