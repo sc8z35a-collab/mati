@@ -32,6 +32,9 @@ fs.mkdirSync(out, { recursive: true });
   const [w, h] = (process.env.VP || "960x540").split("x").map(Number);
   const p = await b.newPage({ viewport: { width: w, height: h } });
   p.setDefaultTimeout(300000);
+  // page.screenshot() waits for stable frames and can hang on a busy SwiftShader
+  // WebGL page; raw CDP capture returns immediately (same as tools/shot.cjs).
+  const cdp = await p.context().newCDPSession(p);
   const errors = [];
   p.on("pageerror", (e) => errors.push("PAGEERROR " + e.message));
   p.on("console", (m) => { if (m.type() === "error" && !/ERR_FAILED|Failed to load/.test(m.text())) errors.push(m.text().slice(0, 300)); });
@@ -48,7 +51,8 @@ fs.mkdirSync(out, { recursive: true });
       await p.evaluate(([x, z, yaw, pitch]) => evercity.debug.pose(x, z, yaw, pitch), [x, z, yaw, pitch]);
       await p.waitForTimeout(Number(process.env.SETTLE || 700));
       const file = `${out}/${process.env.TAG || "view"}_${t}_${name}.png`;
-      await p.screenshot({ path: file });
+      const shot = await cdp.send("Page.captureScreenshot", { format: "png" });
+      fs.writeFileSync(file, Buffer.from(shot.data, "base64"));
       console.log("shot", file);
     }
   }
