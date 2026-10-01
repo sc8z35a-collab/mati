@@ -20,3 +20,22 @@
 ## [A] 作業が失われるリスク（環境が不意にリセット/終了）
 - 解決: `tools/collab/autosave.sh`（3分おき commit+push+Draft PR）を `tools/collab/start.sh <ID>` で起動。`setsid nohup` で Bashツール終了後も生存。
 - 注意: サンドボックスリセットでデーモンも死ぬ → start.sh を再実行（冪等）。cron は環境に無い（`which crontab` 空）ため常駐ループ方式。
+
+## [A] 4エージェントが「同じサンドボックス」に同居していた（想定外）
+- 症状: B/C/D が同じ /home/user/webapp・同じ RAM 985MB を共有。A の作業ツリーで別エージェントが checkout すると全員が壊れる危険。
+- 解決: 各自は専用 `git worktree`（`.wt-b` `.wt-c`）や独立クローン（`.agent-d`）で作業し、HTTPサーバーもポートを分ける（A:3000 B:3001 C:3003 D:3002…）。`.gitignore` に `.wt-*/ .agent-*/` を追加済み。
+- 再発防止: 起動時に `git worktree list` と `ls /tmp/pw` で同居者を確認する。
+
+## [A] page.screenshot() が無限に待つ（WebGLページ）
+- 症状: Playwright `page.screenshot()` が SwiftShader で重いページだと返ってこない（6分以上）。
+- 原因: 安定フレーム/フォント待ちでrAFが忙しいページが完了扱いにならない。
+- 解決: CDP の `Page.captureScreenshot` を使う（`tools/shot.cjs` / `tools/views.cjs` は対応済み）。
+
+## [A] `pkill -f <パターン>` で自分のBashシェルごと死ぬ
+- 症状: `pkill -f views.cjs; ...` を実行したら Bash ツール自体が exit -1。
+- 原因: Bashツールは `bash -c "<コマンド全文>"` で動くため、そのシェルのコマンドラインにもパターン文字列が含まれ、自分自身にマッチする。
+- 解決: `pgrep -f "node /path/to/views"` でPIDを確認してから `kill <pid>`、または `pkill -f "[v]iews.cjs"` のように正規表現でパターン自身を外す。
+- さらに注意: 共有サンドボックスでは `pkill chrome` は **他エージェントの撮影も殺す**。自分の子プロセスだけを止めること。
+
+## [A] Chromium同時起動の直列化
+- 解決: `bash tools/chromium-lock.sh <cmd>`（.chromium.lock → .shot.lock の順で flock、最大420秒で自動解放）。B/C/D の各ラッパーと同じロックファイルなので互換。
