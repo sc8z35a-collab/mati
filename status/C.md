@@ -13,6 +13,7 @@
 3. 看板: 袖看板(日本語・内照式・夜点灯)、ネオン管(色付きHDR発光)、ひさし/オーニング(shop等)、室外機+配管。
 4. 外壁の経年: 雨だれ・泥はね・スラブ下の汚れ（外殻近傍だけに効くシェーダ注入。内装には効かない）。
 - 静的ジオメトリは既存の (kind,mat,tier) バッチに相乗り＝draw call 増ほぼゼロ。独自メッシュは数個のみ。
-- [doing] 1. Interior Mapping 実装
+- [12:01] サンドボックスがリセット → 新環境で origin/agent-c から復元して再開
+- [doing] 1. Interior Mapping のAA調整・撮影検証
 - [12:02] サンドボックスリセット → 新環境(単独)で復帰。agent-c を genspark_ai_developer 最新に載せ直し（detail-facade.js のみ差分）。
 - [doing] Interior Mapping 窓の検証撮影 → 屋上/看板/ネオン/経年汚れ → 本番(main / GitHub Pages)反映
