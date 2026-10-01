@@ -93,7 +93,7 @@
       vec3 V = normalize(vWorld - cameraPosition);
       float camDist = max(length(vWorld - cameraPosition), 0.5);
       float pix = max(length(fwidth(vUV)), 1e-4);
-      FW = pix;
+      FW = pix * 1.5;
       vec3 dir = vec3(dot(V, vT), V.y, -dot(V, vN));
       dir.x = abs(dir.x) < 1e-4 ? 1e-4 : dir.x;
       dir.y = abs(dir.y) < 1e-4 ? 1e-4 : dir.y;
@@ -109,8 +109,8 @@
       vec3 lamp = r2 < 0.32 ? vec3(1.0, 0.66, 0.36) : r2 < 0.62 ? vec3(1.0, 0.8, 0.56) : r2 < 0.86 ? vec3(1.0, 0.9, 0.78) : vec3(0.82, 0.9, 1.0);
       if (office) lamp = r2 < 0.72 ? vec3(0.9, 0.95, 1.0) : vec3(1.0, 0.9, 0.78);
       if (gallery) lamp = vec3(1.0, 0.93, 0.84);
-      float lampI = lit * (0.32 + 0.18 * uGolden + 1.5 * uNight);
-      vec3 daylight = uSkyBottom * (0.5 * uDay + 0.36 * uGolden + 0.015 * uNight);
+      float lampI = lit * (0.22 + 0.16 * uGolden + 1.5 * uNight);
+      vec3 daylight = uSkyBottom * (0.34 * uDay + 0.26 * uGolden + 0.012 * uNight);
 
       // ---- curtain / blind layer right behind the glass ----
       float cA = 0.06 + r3 * 0.36, cB = 0.06 + r4 * 0.34;          // curtain panel widths (fraction)
@@ -140,7 +140,8 @@
         float t = min(min(tt.x, tt.y), tt.z);
         vec3 h = p + dir * t;
         FW = pix * (1.0 + t / camDist) / max(0.25, abs(t == tt.z ? dir.z : t == tt.x ? dir.x : dir.y) / length(dir)) * 0.7;
-        FW = min(FW, 0.6);
+        FW = min(FW * 1.6, 0.8);
+        float far = smoothstep(0.02, 0.07, FW); // 1 = too far for fine pattern detail
         vec3 wall = mix(vec3(0.88, 0.86, 0.81), vec3(0.8, 0.76, 0.68), r3);
         if (r4 > 0.78 && !office) wall = r5 < 0.33 ? vec3(0.56, 0.63, 0.54) : r5 < 0.66 ? vec3(0.72, 0.52, 0.42) : vec3(0.34, 0.4, 0.5);
         if (gallery) wall = vec3(0.93, 0.92, 0.9);
@@ -182,8 +183,8 @@
             // apartment / studio: bookshelf or TV wall
             if (r5 > 0.45) {
               float shelf = rect(q, vec2(0.6, 0.0), vec2(2.4, 2.3));
-              float books = stripes(q.y, 0.42, 0.82) * mix(step(0.1, fract(q.x / 0.09 + h2(floor(q.yy / 0.42)))), 0.9, smoothstep(0.02, 0.06, FW));
-              vec3 bookC = lin(mix(vec3(0.6, 0.3, 0.25), vec3(0.3, 0.45, 0.55), h2(floor(q / vec2(0.09, 0.42)))));
+              float books = stripes(q.y, 0.42, 0.82) * mix(step(0.1, fract(q.x / 0.09 + h2(floor(q.yy / 0.42)))), 0.9, far);
+              vec3 bookC = lin(mix(vec3(0.6, 0.3, 0.25), vec3(0.3, 0.45, 0.55), mix(h2(floor(q / vec2(0.09, 0.42))), 0.5, far)));
               alb = mix(alb, mix(lin(vec3(0.45, 0.33, 0.22)), bookC, books), shelf);
             }
             float tv = rect(q, vec2(W * 0.5 - 0.1, 0.95), vec2(W * 0.5 + 1.5, 1.85));
@@ -201,11 +202,11 @@
           }
         } else if (dir.y < 0.0) {        // floor
           e = min(min(h.x, W - h.x), D - h.z);
-          if (office) alb = lin(vec3(0.36, 0.37, 0.38)) * (0.94 + 0.06 * mix(h2(floor(h.xz / 0.5)), 0.5, smoothstep(0.1, 0.3, FW)));
+          if (office) alb = lin(vec3(0.36, 0.37, 0.38)) * (0.97 + 0.06 * mix(h2(floor(h.xz / 0.5)) - 0.5, 0.0, far));
           else if (gallery) alb = lin(vec3(0.62, 0.61, 0.58));
           else {
             float plank = floor(h.x / 0.19);
-            alb = lin(mix(vec3(0.52, 0.37, 0.24), vec3(0.62, 0.48, 0.33), r1)) * (0.84 + 0.22 * h2(vec2(plank, floor(h.z / 1.6 + plank * 0.37))));
+            alb = lin(mix(vec3(0.52, 0.37, 0.24), vec3(0.62, 0.48, 0.33), r1)) * (0.95 + mix(0.22 * h2(vec2(plank, floor(h.z / 1.6 + plank * 0.37))) - 0.11, 0.0, far));
             alb *= 0.9 + 0.1 * stripes(h.x, 0.19, 0.96);
             float rug = rect(h.xz, vec2(W * 0.25, D * 0.3), vec2(W * 0.75, D * 0.75));
             alb = mix(alb, lin(mix(vec3(0.6, 0.5, 0.42), vec3(0.32, 0.38, 0.42), r5)), rug * step(0.4, r3));
@@ -235,7 +236,7 @@
         float tf = zf / dir.z;
         if (tf < t) {
           vec2 q = (p + dir * tf).xy;
-          FW = min(pix * (1.0 + tf / camDist) * 0.8, 0.5);
+          FW = min(pix * (1.0 + tf / camDist) * 1.4, 0.5);
           if (q.x > 0.0 && q.x < W && q.y > 0.0 && q.y < H) {
             float m = 0.0;
             vec3 fc = lin(vec3(0.32, 0.3, 0.28));
@@ -280,7 +281,7 @@
               float lampShade = rect(q, vec2(3.22, 1.6), vec2(3.62, 1.92)) * step(0.4, r5);
               m = clamp(sofa + arm + pot + leaves + lampPole + lampShade, 0.0, 1.0);
               vec3 sofaC = lin(mix(vec3(0.42, 0.5, 0.48), vec3(0.62, 0.45, 0.36), r2));
-              fc = leaves > 0.5 ? lin(vec3(0.22, 0.38, 0.2)) * (0.8 + 0.4 * h2(floor(q * 9.0))) : pot > 0.5 ? lin(vec3(0.6, 0.42, 0.32)) : lampShade > 0.5 ? lin(vec3(0.9, 0.86, 0.76)) : sofaC;
+              fc = leaves > 0.5 ? lin(vec3(0.22, 0.38, 0.2)) * (0.9 + 0.2 * sin(q.x * 11.0) * sin(q.y * 13.0)) : pot > 0.5 ? lin(vec3(0.6, 0.42, 0.32)) : lampShade > 0.5 ? lin(vec3(0.9, 0.86, 0.76)) : sofaC;
               fe = lampShade * lit * 2.2;
             }
             if (m > 0.02) {
