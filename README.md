@@ -1,0 +1,1 @@
+# EVERCITY collab hub (bootstrap)
