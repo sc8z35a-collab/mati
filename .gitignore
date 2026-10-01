@@ -1,1 +1,4 @@
 .artifacts/
+.collab/
+.autosave/
+.collab-agent
