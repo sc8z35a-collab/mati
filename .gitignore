@@ -2,3 +2,5 @@
 .collab/
 .autosave/
 .collab-agent
+.wt-*/
+.agent-*/

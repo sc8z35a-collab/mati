@@ -33,19 +33,19 @@ save_work() {
     git add -A >/dev/null 2>&1
     git commit -q --no-verify -m "wip(autosave-$ID): $(date '+%F %T')" >/dev/null 2>&1 && log "work: committed"
   fi
+  timeout 60 git fetch -q origin "$BASE" >/dev/null 2>&1
   if ! timeout 60 git push -q origin "HEAD:refs/heads/$BRANCH" >/dev/null 2>&1; then
     # remote moved (e.g. leader force-updated). Never lose local work: push to a rescue ref.
     timeout 60 git push -q origin "HEAD:refs/heads/rescue/$BRANCH-$(date +%m%d%H%M)" >/dev/null 2>&1
     log "work: push rejected -> saved to rescue/$BRANCH-*"
   fi
-  if command -v gh >/dev/null && [ ! -e "$ROOT/.autosave/pr-ok" ]; then
-    if [ -n "$(timeout 30 gh pr list --head "$BRANCH" --state open --json number -q '.[].number' 2>/dev/null)" ]; then
-      touch "$ROOT/.autosave/pr-ok"
-    else
+  # Re-check every cycle: a PR can be merged/closed by the leader at any time.
+  if command -v gh >/dev/null && [ -n "$(git log --oneline "origin/$BASE..HEAD" 2>/dev/null | head -1)" ]; then
+    if [ -z "$(timeout 30 gh pr list --head "$BRANCH" --state open --json number -q '.[].number' 2>/dev/null)" ]; then
       timeout 60 gh pr create --draft --base "$BASE" --head "$BRANCH" \
         --title "wip(agent-$ID): autosaved work of agent $ID" \
         --body "Autosaved by tools/collab/autosave.sh every ${INTERVAL}s. Leader squashes on merge. See collab-hub branch for coordination." \
-        >/dev/null 2>&1 && touch "$ROOT/.autosave/pr-ok" && log "work: draft PR created"
+        >/dev/null 2>&1 && log "work: draft PR created"
     fi
   fi
 }
