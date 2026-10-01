@@ -52,9 +52,9 @@
     #include <fog_pars_fragment>
 
     float h2(vec2 p) {
-      p = fract(p * vec2(123.34, 456.21));
-      p += dot(p, p + 45.32);
-      return fract(p.x * p.y);
+      vec3 q = fract(vec3(p.xyx) * 0.1031);
+      q += dot(q, q.yzx + 33.33);
+      return fract((q.x + q.y) * q.z);
     }
     vec3 lin(vec3 c) { return c * c; }
     // Pixel footprint (metres) at the current sample; set per surface. All masks are
@@ -76,7 +76,7 @@
     void main() {
       // The floor the player is on shows its real, loaded interior instead.
       if (uHide.w > 0.5 && abs(vInfo.x - uHide.x) < 0.5 && abs(vInfo.y - uHide.y) < 0.5) discard;
-      float type = vInfo.z;
+      float type = floor(vInfo.z + 0.5);
       bool office = type < 0.5;
       bool hotel = abs(type - 1.0) < 0.5;
       bool resi = abs(type - 2.0) < 0.5;
@@ -88,7 +88,9 @@
       float D = office ? 11.0 : hotel ? 6.5 : gallery ? 10.0 : 7.0;
       float ux = vUV.x - 1.7;
       float cx = floor(ux / W);
-      vec2 cell = vec2(cx, vInfo.y) + vInfo.x * vec2(7.13, 3.71) + vInfo.w;
+      // Varyings are interpolated: snap the per-instance ids to exact integers before hashing.
+      vec4 id = floor(vInfo + 0.5);
+      vec2 cell = mod(vec2(cx + id.w * 13.0 + id.x * 7.0, id.y * 5.0 + id.x * 3.0), 289.0);
       float r1 = h2(cell), r2 = h2(cell + 17.3), r3 = h2(cell + 41.9), r4 = h2(cell + 3.1), r5 = h2(cell + 77.7);
 
       vec3 V = normalize(vWorld - cameraPosition);
@@ -335,7 +337,7 @@
               pz = alongX ? b.z + side * inset : b.z;
             // Plane +Z must point outwards.
             const ry = alongX ? (side > 0 ? 0 : Math.PI) : side > 0 ? Math.PI / 2 : -Math.PI / 2;
-            items.push({ px, py: cy, pz, ry, len, H, info: [index, f, typeCode, face * 31.7] });
+            items.push({ px, py: cy, pz, ry, len, H, info: [index, f, typeCode, face] });
           }
         }
       });
