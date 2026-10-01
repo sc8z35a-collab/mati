@@ -42,6 +42,7 @@
     uniform vec3 uSkyTop;
     uniform vec3 uSkyBottom;
     uniform vec4 uHide;
+    uniform float uDebug;
     varying vec3 vWorld;
     varying vec3 vT;
     varying vec3 vN;
@@ -298,6 +299,9 @@
       if (R.y < 0.0) sky *= 0.45; // street / opposite buildings reflect darker
       float F = 0.04 + 0.96 * pow(1.0 - clamp(dir.z, 0.0, 1.0), 5.0);
       col = mix(col, sky * mix(1.0, 0.35, uNight), clamp(F * 0.85 + mix(0.2, 0.05, uNight), 0.0, 0.92));
+      if (uDebug > 0.5 && uDebug < 1.5) col = vec3(r1, r2, r3);
+      if (uDebug > 1.5 && uDebug < 2.5) col = vec3(fract(vUV * 0.1), 0.0);
+      if (uDebug > 2.5) col = vec3(FW * 20.0, pix * 50.0, 0.0);
       gl_FragColor = vec4(col, 1.0);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
@@ -344,6 +348,7 @@
           uDay: { value: 0 },
           uClock: { value: 0 },
           uHide: { value: new T.Vector4(-1, -1, 0, 0) },
+          uDebug: { value: 0 },
         },
       ]);
       // Share the live sky colours (setTime() mutates these objects).
