@@ -3456,7 +3456,7 @@
   }
   // A read-only diagnostics hook enables reproducible in-browser validation.
   window.evercity = {
-    release: "20260930.1",
+    release: "20261001.1",
     serviceSnapshot: () => services?.snapshot(),
     objectSnapshot,
     objectTest: objectSelfTest,
