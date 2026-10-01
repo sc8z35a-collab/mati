@@ -317,6 +317,7 @@
     city(api) {
       this.api = api;
       this.buildWindows(api);
+      this.buildDressing(api);
     },
     buildWindows(api) {
       const T = api.THREE;
