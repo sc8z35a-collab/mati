@@ -24,6 +24,11 @@ alive() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
 
 busy() {
   local g; g="$(git -C "$ROOT" rev-parse --git-dir)"
+  # サンドボックスのリセット等で残った古い index.lock（5分以上・git プロセス無し）は除去する
+  if [ -e "$g/index.lock" ] && [ -n "$(find "$g/index.lock" -mmin +5 2>/dev/null)" ] &&
+    ! pgrep -x git >/dev/null 2>&1; then
+    rm -f "$g/index.lock" && log "removed stale index.lock"
+  fi
   [ -e "$g/index.lock" ] || [ -d "$g/rebase-merge" ] || [ -d "$g/rebase-apply" ] ||
     [ -e "$g/MERGE_HEAD" ] || [ -e "$g/CHERRY_PICK_HEAD" ] || [ -e "$g/REVERT_HEAD" ]
 }
