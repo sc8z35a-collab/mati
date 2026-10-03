@@ -2601,6 +2601,7 @@
     $("weather-icon").textContent = night ? "☾" : "☀";
     $("weather-label").textContent = night ? "晴れ / 19°C" : "晴れ / 24°C";
     environment?.apply();
+    EvercityPlugins.emit("time", mode);
   }
   function teleport(b) {
     // Arriving somewhere new ends the photo session and restores the walking lens.
@@ -3048,10 +3049,22 @@
         (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) -
         (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0) +
         joy.x;
-      const len = Math.hypot(forward, strafe);
+      let len = Math.hypot(forward, strafe);
       if (len > 1) {
         forward /= len;
         strafe /= len;
+      }
+      // Plugins (e.g. the e-scooter) may take over locomotion for this frame.
+      const driven = EvercityPlugins.drive(dt, {
+        forward,
+        strafe,
+        boost:
+          running || keys.has("ShiftLeft") || keys.has("ShiftRight"),
+        move,
+      });
+      if (driven) {
+        forward = strafe = 0;
+        len = 0;
       }
       const speed =
         (running || keys.has("ShiftLeft") || keys.has("ShiftRight")
@@ -3091,6 +3104,7 @@
       player.yaw,
       stories?.photoMode ? EvercityPhotography.options().roll : 0,
     );
+    if (!stories?.photoMode) EvercityPlugins.camera(dt, camera);
     hdr.photoMode = !!stories?.photoMode;
     hdr.exposureMultiplier = stories?.photoMode
       ? 2 ** EvercityPhotography.options().exposure
@@ -3136,6 +3150,7 @@
       $("compass-direction").textContent = dirs[Math.round(deg / 45) % 8];
       lastMap = now;
     }
+    EvercityPlugins.update(dt, dialogOpen(), now);
     visibility.prepare(camera, exterior?.quality === "balanced");
     hdr.render(scene, timeMode);
   }
@@ -3733,6 +3748,45 @@
       )
         stories.resume();
       else if (!launchParams.has("test")) stories.restoreAtmosphere();
+      EvercityPlugins.init({
+        THREE: T,
+        scene,
+        renderer,
+        camera,
+        player,
+        sun,
+        ambient,
+        sky,
+        skyUniforms,
+        materials,
+        buildings,
+        parks,
+        vehicles,
+        people,
+        hdr,
+        exterior,
+        lighting: lightingSystem,
+        environment,
+        stories,
+        services,
+        blocked,
+        findBuilding,
+        supportHeight,
+        toast,
+        openDialog,
+        dialogOpen,
+        startGame,
+        setTime,
+        getTime: () => timeMode,
+        isTouch,
+        joy,
+        keys,
+        running: () => running,
+        indoor: () => !!currentBuilding && player.floor < currentBuilding.floors,
+        currentBuilding: () => currentBuilding,
+        BASE,
+        FLOOR,
+      });
       $("loading").style.opacity = "0";
       $("loading").style.display = "none";
       $("game").dataset.ready = "true";
