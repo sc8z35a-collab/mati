@@ -9,6 +9,9 @@
 #   bash tools/autosave/autosave.sh stop    # stop daemon + watchdog
 #   bash tools/autosave/autosave.sh status  # show state and last log lines
 #   bash tools/autosave/autosave.sh once    # one immediate save
+#   bash tools/autosave/autosave.sh ensure  # silent start-if-needed (safe to call before every command)
+# Sandbox resets kill every process: call `ensure` (or start) again afterwards. PID files are
+# verified against /proc/<pid>/cmdline so a recycled PID is never mistaken for the daemon.
 set -u
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SELF="$ROOT/tools/autosave/autosave.sh"
@@ -17,7 +20,12 @@ INTERVAL="${INTERVAL:-180}"
 mkdir -p "$STATE"
 LOG="$STATE/autosave.log"
 log() { echo "[$(date '+%F %T')] $*" >> "$LOG"; }
-alive() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
+alive() {
+  [ -f "$1" ] || return 1
+  local pid; pid="$(cat "$1" 2>/dev/null)"
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null &&
+    tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -q "$SELF"
+}
 
 busy() {
   local g; g="$(git -C "$ROOT" rev-parse --git-dir)"
@@ -61,6 +69,10 @@ case "${1:-run}" in
     alive "$STATE/watchdog.pid" && echo "watchdog running pid $(cat "$STATE/watchdog.pid")" || echo "watchdog NOT running"
     tail -5 "$LOG" 2>/dev/null;;
   once) save_once;;
+  ensure)
+    alive "$STATE/pid" || { nohup setsid bash "$SELF" run >/dev/null 2>&1 < /dev/null & }
+    alive "$STATE/watchdog.pid" || { nohup setsid bash "$SELF" watchdog >/dev/null 2>&1 < /dev/null & }
+    exit 0;;
   watchdog)
     # restarts the daemon if it died or has not saved for 10 minutes
     echo $$ > "$STATE/watchdog.pid"
@@ -75,6 +87,7 @@ case "${1:-run}" in
   run)
     echo $$ > "$STATE/pid"
     log "autosave loop started (interval ${INTERVAL}s pid $$)"
-    trap 'log "autosave stopped"; rm -f "$STATE/pid"; exit 0' TERM INT
+    # Final save on a graceful stop so the last minutes of work are not lost.
+    trap 'save_once; log "autosave stopped"; rm -f "$STATE/pid"; exit 0' TERM INT
     while true; do save_once; sleep "$INTERVAL" & wait $!; done;;
 esac
