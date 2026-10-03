@@ -4,7 +4,7 @@
 // Chromium (see tools/gfx-run.sh) so only one browser runs at a time in the 1 GB sandbox.
 const path = require("path");
 const fs = require("fs");
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "/tmp/pw/node_modules/playwright");
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || require("path").join(__dirname, "../.pw/node_modules/playwright"));
 const OUT = process.env.OUT || "/tmp/shots";
 fs.mkdirSync(OUT, { recursive: true });
 (async () => {
@@ -35,7 +35,7 @@ fs.mkdirSync(OUT, { recursive: true });
       console.log(m.type(), t.slice(0, 400));
     if (process.env.LOG && /EVERCITY/.test(t)) console.log("LOG", t.slice(0, 500));
   });
-  await p.route("**/three.min.js", (r) => r.fulfill({ path: "/tmp/pw/three.min.js", contentType: "application/javascript" }));
+  await p.route("**/three.min.js", (r) => r.fulfill({ path: process.env.THREE_SCRIPT || path.join(__dirname, "../.pw/three.min.js"), contentType: "application/javascript" }));
   await p.route("**/fonts.googleapis.com/**", (r) => r.abort());
   await p.route("**/fonts.gstatic.com/**", (r) => r.abort());
   const quality = process.env.QUALITY || "high";
