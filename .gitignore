@@ -2,3 +2,5 @@
 .autosave/
 node_modules/
 .wt-*/
+.tooling/
+.pw-browsers/
