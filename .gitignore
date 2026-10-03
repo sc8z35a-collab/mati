@@ -1,3 +1,4 @@
 .artifacts/
 .autosave/
 node_modules/
+.wt-*/
