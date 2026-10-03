@@ -2,3 +2,4 @@
 .autosave/
 node_modules/
 .wt-*/
+.hy/
