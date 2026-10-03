@@ -32,6 +32,14 @@ flock -w 600 9 || { echo "shot lock timeout"; exit 1; }
       pkill -f "[c]hrome-linux/chrome.*playwright_chromiumdev"; break
     fi
   done ) & GUARD=$!
-cd "$ROOT" && timeout "${LIMIT:-560}" "$@"; rc=$?
+cd "$ROOT"
+# Hard cap in a transient cgroup: the OOM killer then hits Chromium, never the sandbox.
+if sudo -n true 2>/dev/null && command -v systemd-run >/dev/null; then
+  sudo -E systemd-run --scope -q -p MemoryMax="${MEM_MAX:-600M}" -p MemorySwapMax=0 \
+    --uid="$(id -u)" --gid="$(id -g)" --setenv=HOME="$HOME" \
+    timeout "${LIMIT:-560}" "$@"; rc=$?
+else
+  timeout "${LIMIT:-560}" "$@"; rc=$?
+fi
 kill $GUARD 2>/dev/null
 exit $rc
